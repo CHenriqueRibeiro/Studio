@@ -1,0 +1,6 @@
+{
+  "name": "Fortics Studio: Agent & Workflow Builder",
+  "description": "Plataforma de criação, refatoração, validação e teste de Agentes Inteligentes e Workflows para o ecossistema Fortics Omnichannel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
