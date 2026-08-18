@@ -208,7 +208,21 @@ export default function App() {
               if (newWfs.length > 0) {
                 setWorkflows(newWfs);
                 setWorkflow(newWfs[0]);
+                setShowJsonSection(true);
               }
+            }}
+            onAgentAndWorkflowsGenerated={(newAgent, newWfs) => {
+              setAgent(newAgent);
+              if (newWfs.length > 0) {
+                setWorkflows(newWfs);
+                setWorkflow(newWfs[0]);
+              }
+              setHasGenerated(true);
+              setShowJsonSection(true);
+              setAppTab('builder');
+              setTimeout(() => {
+                resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }, 250);
             }}
             showToast={showToast}
           />

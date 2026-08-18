@@ -28,7 +28,8 @@ import {
   Copy,
   Zap,
   BrainCircuit,
-  Wrench
+  Wrench,
+  Edit3
 } from 'lucide-react';
 import { 
   GenerationRequest, 
@@ -145,6 +146,46 @@ Regras e Validações de Negócio:
 - Se o cliente solicitar atendente humano ou demonstrar insatisfação, retornar SOMENTE #SUPORTE_HUMANO
 - Respeitar escopo mono skill e manter foco estrito no atendimento de suporte`
   );
+
+  // Sync helpers between freeform prompt and structured steps/rules
+  const handleFreeformPromptChange = (text: string) => {
+    setFreeformPrompt(text);
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const stepsList: string[] = [];
+    const rulesList: string[] = [];
+    let isRuleSection = false;
+
+    lines.forEach(line => {
+      const lineLower = line.toLowerCase();
+      if (lineLower.includes('regra') || lineLower.includes('validação') || lineLower.includes('diretrizes') || lineLower.includes('como fazer') || lineLower.includes('outras regras')) {
+        isRuleSection = true;
+        return;
+      }
+      if (lineLower.includes('passo') || lineLower.includes('o que fazer') || lineLower.includes('fluxo') || lineLower.includes('etapa')) {
+        isRuleSection = false;
+        return;
+      }
+
+      if (isRuleSection) {
+        rulesList.push(line.startsWith('-') ? line : `- ${line}`);
+      } else {
+        stepsList.push(line.startsWith('-') ? line : `- ${line}`);
+      }
+    });
+
+    if (stepsList.length > 0) setNaturalSteps(stepsList.join('\n'));
+    if (rulesList.length > 0) setNaturalRules(rulesList.join('\n'));
+  };
+
+  const handleStructuredStepsChange = (text: string) => {
+    setNaturalSteps(text);
+    setFreeformPrompt(`PASSOS DO ATENDIMENTO:\n${text}\n\nREGRAS E VALIDAÇÕES:\n${naturalRules}`);
+  };
+
+  const handleStructuredRulesChange = (text: string) => {
+    setNaturalRules(text);
+    setFreeformPrompt(`PASSOS DO ATENDIMENTO:\n${naturalSteps}\n\nREGRAS E VALIDAÇÕES:\n${text}`);
+  };
 
   // 3. Workflows with nested API integrations
   const [configuredWorkflows, setConfiguredWorkflows] = useState<ConfiguredWorkflow[]>([
@@ -662,63 +703,127 @@ Regras e Validações de Negócio:
               <BrainCircuit className="w-4 h-4 text-indigo-400" />
               <span>Instruções & Regras do Agente</span>
             </label>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-0.5 rounded-full">
-              Padrão Oficial Fortics (instruction.steps & other_rules)
-            </span>
+
+            {/* Alternador de Modo: Texto Livre Único vs Passos & Regras Separados */}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setInputMode('freeform')}
+                  className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    inputMode === 'freeform'
+                      ? 'bg-emerald-500 text-slate-950 shadow-xs font-bold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Texto Livre (com IA)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode('structured')}
+                  className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    inputMode === 'structured'
+                      ? 'bg-emerald-500 text-slate-950 shadow-xs font-bold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ListOrdered className="w-3.5 h-3.5" />
+                  <span>Passos & Regras (Separados)</span>
+                </button>
+              </div>
+
+              <span className="hidden sm:inline-block text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-1 rounded-lg">
+                Padrão Oficial Fortics
+              </span>
+            </div>
           </div>
 
-          {/* Modo Campos Separados Estruturados */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Passos do Agente */}
+          {/* Renderização de acordo com o modo selecionado */}
+          {inputMode === 'freeform' ? (
+            /* Modo Texto Livre Único */
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <ListOrdered className="w-4 h-4 text-emerald-400" />
+                  <Edit3 className="w-4 h-4 text-emerald-400" />
                   <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                    Passos do Agente (O que fazer)
+                    Instruções Gerais do Atendimento (Texto Livre)
                   </label>
                 </div>
-                <span className="text-[10px] text-slate-500 font-mono">instruction.steps</span>
+                <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded font-mono">
+                  Separação inteligente de Passos & Regras
+                </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-tight">
-                Escreva cada ação em uma linha. O gerador compilará no padrão limpo sem números nem prefixos.
+                Escreva livremente como o bot deve atender. A IA identifica automaticamente o que são os <strong>Passos (o que fazer)</strong> e as <strong>Regras (como fazer)</strong>.
               </p>
               <textarea
-                rows={8}
-                value={naturalSteps}
-                onChange={e => setNaturalSteps(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                placeholder="- Cumprimentar o cliente e identificar pelo nome&#10;- Pedir o CPF ou CNPJ do titular&#10;- Consultar o cadastro via integração&#10;- Confirmar os dados antes de prosseguir..."
+                rows={10}
+                value={freeformPrompt}
+                onChange={e => handleFreeformPromptChange(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 font-sans leading-relaxed focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                placeholder="Exemplo: Cumprimentar o cliente, solicitar CPF/CNPJ, consultar cadastro no sistema, listar contratos ativos e emitir segunda via se solicitado. Regras: validar CPF com 11 dígitos, pedir confirmação expressa antes de gravar e retornar #SUPORTE_HUMANO se o cliente pedir atendente..."
                 required={studioMode !== 'workflow_only'}
               />
+              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
+                <span>Dica: Use palavras como "Passos" e "Regras" ou tópicos com hífen (-) para orientar o fluxo.</span>
+                <span>{freeformPrompt.length} caracteres</span>
+              </div>
             </div>
-
-            {/* Regras e Validações */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  <label className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                    Regras & Validações (Como fazer)
-                  </label>
+          ) : (
+            /* Modo Campos Separados Estruturados */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Passos do Agente */}
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ListOrdered className="w-4 h-4 text-emerald-400" />
+                    <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                      Passos do Agente (O que fazer)
+                    </label>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">instruction.steps</span>
                 </div>
-                <span className="text-[10px] text-slate-500 font-mono">other_rules</span>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Escreva cada ação em uma linha. O gerador compilará no padrão limpo sem números nem prefixos.
+                </p>
+                <textarea
+                  rows={8}
+                  value={naturalSteps}
+                  onChange={e => handleStructuredStepsChange(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="- Cumprimentar o cliente e identificar pelo nome&#10;- Pedir o CPF ou CNPJ do titular&#10;- Consultar o cadastro via integração&#10;- Confirmar os dados antes de prosseguir..."
+                  required={studioMode !== 'workflow_only'}
+                />
               </div>
-              <p className="text-[11px] text-slate-400 leading-tight">
-                Regras de validação (CPF/CNPJ), confirmação expressa antes de gravar, tags de transbordo (#SUPORTE_HUMANO).
-              </p>
-              <textarea
-                rows={8}
-                value={naturalRules}
-                onChange={e => setNaturalRules(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                placeholder="- Validar CPF no padrão XXX.XXX.XXX-XX&#10;- Pedir confirmação expressa antes de gravar&#10;- Se solicitar atendente, retornar #SUPORTE_HUMANO..."
-                required={studioMode !== 'workflow_only'}
-              />
-            </div>
 
-          </div>
+              {/* Regras e Validações */}
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-amber-400" />
+                    <label className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                      Regras & Validações (Como fazer)
+                    </label>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">other_rules</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Regras de validação (CPF/CNPJ), confirmação expressa antes de gravar, tags de transbordo (#SUPORTE_HUMANO).
+                </p>
+                <textarea
+                  rows={8}
+                  value={naturalRules}
+                  onChange={e => handleStructuredRulesChange(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  placeholder="- Validar CPF no padrão XXX.XXX.XXX-XX&#10;- Pedir confirmação expressa antes de gravar&#10;- Se solicitar atendente, retornar #SUPORTE_HUMANO..."
+                  required={studioMode !== 'workflow_only'}
+                />
+              </div>
+
+            </div>
+          )}
 
           {/* Seção Exclusiva de Tools & Transbordo em Modo 'agent_only' */}
           {studioMode === 'agent_only' && (

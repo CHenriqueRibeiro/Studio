@@ -20,7 +20,14 @@ import {
   GitCommit,
   Tag,
   ArrowRight,
-  Database
+  Database,
+  Bot,
+  ListOrdered,
+  ShieldCheck,
+  Edit3,
+  Sliders,
+  Eye,
+  FileText
 } from 'lucide-react';
 import { validateForticsAgentAndWorkflow } from '../utils/forticsValidator';
 
@@ -73,11 +80,94 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
   // Real-time live validation state
   const [liveValidation, setLiveValidation] = useState<ValidationReport | null>(initialValidation);
 
+  // Agent visual vs raw JSON editing mode
+  const [agentViewMode, setAgentViewMode] = useState<'visual' | 'json'>('visual');
+  const [agentPromptMode, setAgentPromptMode] = useState<'freeform' | 'structured'>('freeform');
+  const [agentFreeformText, setAgentFreeformText] = useState<string>('');
+
   useEffect(() => {
     if (agent) {
       setAgentText(JSON.stringify(agent, null, 2));
+      const stepsFormatted = (agent.instruction?.steps || []).map(s => `- ${s}`).join('\n');
+      const rulesFormatted = agent.other_rules || '';
+      setAgentFreeformText(`PASSOS DO ATENDIMENTO:\n${stepsFormatted}\n\nREGRAS E DIRETRIZES:\n${rulesFormatted}`);
     }
   }, [agent]);
+
+  const handleAgentFreeformChange = (text: string) => {
+    setAgentFreeformText(text);
+    if (!agent) return;
+
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const stepsList: string[] = [];
+    const rulesList: string[] = [];
+    let isRuleSection = false;
+
+    lines.forEach(line => {
+      const lineLower = line.toLowerCase();
+      if (lineLower.includes('regra') || lineLower.includes('validação') || lineLower.includes('diretrizes') || lineLower.includes('como fazer') || lineLower.includes('outras regras')) {
+        isRuleSection = true;
+        return;
+      }
+      if (lineLower.includes('passo') || lineLower.includes('o que fazer') || lineLower.includes('fluxo') || lineLower.includes('etapa')) {
+        isRuleSection = false;
+        return;
+      }
+
+      if (isRuleSection) {
+        rulesList.push(line.startsWith('-') ? line : `- ${line}`);
+      } else {
+        const cleanStep = line.replace(/^[-*•\d.]+\s*/, '').trim();
+        if (cleanStep) stepsList.push(cleanStep);
+      }
+    });
+
+    const updatedAgent: ForticsAgent = {
+      ...agent,
+      instruction: {
+        ...agent.instruction,
+        steps: stepsList.length > 0 ? stepsList : agent.instruction.steps
+      },
+      other_rules: rulesList.length > 0 ? rulesList.join('\n') : agent.other_rules
+    };
+
+    setAgentText(JSON.stringify(updatedAgent, null, 2));
+    onUpdateAgent(updatedAgent);
+    if (activeWorkflow) {
+      setLiveValidation(validateForticsAgentAndWorkflow(updatedAgent, activeWorkflow));
+    }
+  };
+
+  const handleAgentStructuredFieldChange = (field: 'steps' | 'rules' | 'greetings' | 'objective', value: string) => {
+    if (!agent) return;
+    let updatedAgent = { ...agent };
+
+    if (field === 'steps') {
+      const cleanSteps = value.split('\n').map(s => s.replace(/^[-*•\d.]+\s*/, '').trim()).filter(Boolean);
+      updatedAgent.instruction = {
+        ...updatedAgent.instruction,
+        steps: cleanSteps
+      };
+      setAgentFreeformText(`PASSOS DO ATENDIMENTO:\n${value}\n\nREGRAS E DIRETRIZES:\n${agent.other_rules}`);
+    } else if (field === 'rules') {
+      updatedAgent.other_rules = value;
+      const stepsFormatted = (agent.instruction?.steps || []).map(s => `- ${s}`).join('\n');
+      setAgentFreeformText(`PASSOS DO ATENDIMENTO:\n${stepsFormatted}\n\nREGRAS E DIRETRIZES:\n${value}`);
+    } else if (field === 'greetings') {
+      updatedAgent.greetings = value;
+    } else if (field === 'objective') {
+      updatedAgent.instruction = {
+        ...updatedAgent.instruction,
+        objective: value
+      };
+    }
+
+    setAgentText(JSON.stringify(updatedAgent, null, 2));
+    onUpdateAgent(updatedAgent);
+    if (activeWorkflow) {
+      setLiveValidation(validateForticsAgentAndWorkflow(updatedAgent, activeWorkflow));
+    }
+  };
 
   useEffect(() => {
     const targetWf = currentWorkflowsList[selectedWfIndex] || workflow;
@@ -329,19 +419,176 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
         {/* Tab Body */}
         <div className="p-4 sm:p-5">
           
-          {/* 1. AGENTE JSON TAB */}
+          {/* 1. AGENTE TAB (Visual / Freeform & JSON Bruto) */}
           {activeTab === 'agent' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Edite diretamente o JSON ou valide a conformidade com o schema Fortics:</span>
-                <span className="font-mono text-emerald-400 text-[11px]">Schema Oficial Fortics v4</span>
+            <div className="space-y-4">
+              
+              {/* Header Switcher: Visual & Texto Livre vs JSON Bruto */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setAgentViewMode('visual')}
+                    className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      agentViewMode === 'visual'
+                        ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Visual & Texto Livre</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAgentViewMode('json')}
+                    className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      agentViewMode === 'json'
+                        ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Code2 className="w-3.5 h-3.5" />
+                    <span>JSON Bruto (agente.json)</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Schema Oficial Fortics v4
+                  </span>
+                </div>
               </div>
-              <textarea
-                rows={20}
-                value={agentText}
-                onChange={(e) => handleAgentTextChange(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs text-emerald-300 focus:outline-none focus:border-emerald-500 leading-relaxed shadow-inner"
-              />
+
+              {agentViewMode === 'visual' ? (
+                /* Visual & Freeform / Structured Editing Mode */
+                <div className="space-y-4">
+                  
+                  {/* Basic Metadata Info */}
+                  {agent && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800/80">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-300">Nome do Agente</label>
+                        <input
+                          type="text"
+                          value={agent.name}
+                          onChange={(e) => {
+                            const updated = { ...agent, name: e.target.value };
+                            setAgentText(JSON.stringify(updated, null, 2));
+                            onUpdateAgent(updated);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-300">Saudação Inicial</label>
+                        <input
+                          type="text"
+                          value={agent.greetings || ''}
+                          onChange={(e) => handleAgentStructuredFieldChange('greetings', e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Instructions & Rules Section with Freeform/Structured Mode */}
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Bot className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                          Instruções & Regras do Agente
+                        </span>
+                      </div>
+
+                      {/* Mode Toggle: Freeform vs Structured */}
+                      <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setAgentPromptMode('freeform')}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                            agentPromptMode === 'freeform'
+                              ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Texto Livre
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAgentPromptMode('structured')}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                            agentPromptMode === 'structured'
+                              ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Passos & Regras
+                        </button>
+                      </div>
+                    </div>
+
+                    {agentPromptMode === 'freeform' ? (
+                      /* Freeform Textarea */
+                      <div className="space-y-1.5">
+                        <textarea
+                          rows={12}
+                          value={agentFreeformText}
+                          onChange={(e) => handleAgentFreeformChange(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 font-sans leading-relaxed focus:border-emerald-500 focus:outline-none"
+                          placeholder="Digite aqui todo o fluxo do agente em texto livre..."
+                        />
+                        <p className="text-[10px] text-slate-500">
+                          A IA sincroniza automaticamente os passos (`instruction.steps`) e as regras (`other_rules`).
+                        </p>
+                      </div>
+                    ) : (
+                      /* Structured Side-by-Side */
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                            <ListOrdered className="w-3.5 h-3.5" />
+                            <span>Passos do Agente (instruction.steps)</span>
+                          </label>
+                          <textarea
+                            rows={10}
+                            value={(agent?.instruction?.steps || []).map(s => `- ${s}`).join('\n')}
+                            onChange={(e) => handleAgentStructuredFieldChange('steps', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-emerald-500 focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Regras & Validações (other_rules)</span>
+                          </label>
+                          <textarea
+                            rows={10}
+                            value={agent?.other_rules || ''}
+                            onChange={(e) => handleAgentStructuredFieldChange('rules', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-amber-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              ) : (
+                /* Raw JSON Mode */
+                <div className="space-y-2">
+                  <textarea
+                    rows={20}
+                    value={agentText}
+                    onChange={(e) => handleAgentTextChange(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs text-emerald-300 focus:outline-none focus:border-emerald-500 leading-relaxed shadow-inner"
+                  />
+                </div>
+              )}
+
             </div>
           )}
 
