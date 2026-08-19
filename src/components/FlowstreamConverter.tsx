@@ -107,17 +107,17 @@ export const FlowstreamConverter: React.FC<FlowstreamConverterProps> = ({
   // Unified Freeform Prompt (Texto Livre Geral)
   const [promptMode, setPromptMode] = useState<'freeform' | 'structured'>('freeform');
   const [freeformPrompt, setFreeformPrompt] = useState<string>(
-`Atendimento Inteligente de Suporte e Autoatendimento Provedor:
+`Atendimento Inteligente com Integração de Sistemas (API / CRM / ERP):
 - Cumprimentar o cliente com cordialidade e pedir o nome caso não esteja identificado
-- Solicitar o CPF ou CNPJ do titular do contrato
-- Executar a consulta cadastral no SGP usando o CPF/CNPJ informado
-- Apresentar ao cliente o seu nome e os contratos ativos localizados
-- Perguntar como pode ajudar (ex: 2ª via de fatura, diagnóstico de conexão ou suporte)
-- Se o cliente solicitar 2ª via, consultar as faturas em aberto e enviar o link/código de barras
+- Solicitar o CPF, CNPJ, E-mail ou Código do cliente
+- Executar a consulta cadastral na API usando os dados informados
+- Apresentar ao cliente o seu nome e os registros/contratos ativos localizados
+- Perguntar como pode ajudar (ex: 2ª via de fatura, consulta de pedido, status ou suporte)
+- Executar a ação solicitada consultando a API correspondente
 - Finalizar o atendimento com cordialidade e confirmação
 
 Regras e Diretrizes do Atendimento:
-- Validar o CPF (11 dígitos) ou CNPJ (14 dígitos) antes de chamar qualquer integração
+- Validar os parâmetros de entrada (ex: CPF com 11 dígitos, formato de e-mail) antes de chamar qualquer integração
 - Sempre confirmar com o cliente antes de executar ações financeiras ou alterações cadastrais
 - Nunca inventar dados; repassar estritamente o que foi retornado pelas consultas da API
 - Se o cliente solicitar atendente humano ou relatar cancelamento, responder SOMENTE #SUPORTE_HUMANO`
@@ -126,16 +126,15 @@ Regras e Diretrizes do Atendimento:
   // Split Step / Rules for Structured view
   const [agentSteps, setAgentSteps] = useState<string>(
 `- Cumprimentar o cliente e identificar pelo nome
-- Pedir o CPF ou CNPJ do titular do contrato
-- Consultar o cadastro do cliente no SGP via integração
-- Exibir os contratos ativos encontrados
-- Consultar as faturas em aberto caso o cliente solicite 2ª via
+- Pedir o CPF, CNPJ ou identificador do cliente
+- Consultar o cadastro do cliente via integração API
+- Exibir os dados e contratos encontrados
+- Executar a operação solicitada (ex: 2ª via ou status)
 - Finalizar o atendimento com cordialidade`
   );
 
   const [agentRules, setAgentRules] = useState<string>(
-`- O CPF deve ser validado e conter 11 dígitos numéricos
-- O CNPJ deve ser validado e conter 14 dígitos numéricos
+`- O CPF/CNPJ deve ser validado antes de chamar a integração
 - Solicitar confirmação expressa do cliente antes de gravar ou emitir dados
 - Se o cliente solicitar atendente humano, retornar SOMENTE #SUPORTE_HUMANO
 - Respeitar escopo mono skill e manter foco estrito no atendimento`
@@ -178,15 +177,15 @@ Regras e Diretrizes do Atendimento:
     if (rulesList.length > 0) setAgentRules(rulesList.join('\n'));
   };
 
-  // Example SGP Total.js JSON for instant 1-click test
-  const loadExampleSgp = () => {
-    const exampleSgp = {
+  // Example FlowStream Total.js JSON for instant 1-click test
+  const loadExampleFlowstream = () => {
+    const exampleFlowstream = {
       "id": "fJ6RT2j1ck61f",
-      "name": "SGP - Provedor e URA",
+      "name": "Integração API - Atendimento e Consultas",
       "variables": {
-        "app": "SZ.CHAT",
+        "app": "FORTICS.AI",
         "token": "61273fe0-88be-488f-b9d6-4731771316f9",
-        "host": "https://www.centralbutanonet.com.br",
+        "host": "https://api.empresa.com.br",
         "super_usuario": "QWdlbnRlX1ZpcnR1YWw6enVzZ3l4LWZ5bnB5My1LdXhweW0="
       },
       "design": {
@@ -206,7 +205,7 @@ Regras e Diretrizes do Atendimento:
           "config": {
             "outputs": 2,
             "name": "Code",
-            "code": "if (typeof data.body === \"number\") { data.body = String(data.body); }\nif (!data.body) {\n  $.send('output2', { status: 'erro', mensagem: 'O CPF ou CNPJ deve ser informado.' });\n} else {\n  $.send('output', { token: $.variables('{token}'), app: $.variables('{app}'), cpfcnpj: data.body });\n}"
+            "code": "if (typeof data.body === \"number\") { data.body = String(data.body); }\nif (!data.body) {\n  $.send('output2', { status: 'erro', mensagem: 'O CPF ou documento deve ser informado.' });\n} else {\n  $.send('output', { token: $.variables('{token}'), app: $.variables('{app}'), cpfcnpj: data.body });\n}"
           },
           "component": "code",
           "connections": {
@@ -216,7 +215,7 @@ Regras e Diretrizes do Atendimento:
         "imbuulh39": {
           "id": "imbuulh39",
           "config": {
-            "url": "{{host}}/api/ura/clientes/",
+            "url": "{{host}}/v1/clientes/consultar",
             "method": "POST",
             "headers": {},
             "serialize": "json",
@@ -231,7 +230,7 @@ Regras e Diretrizes do Atendimento:
           "id": "imbuumq9f",
           "config": {
             "name": "Code",
-            "code": "if(!data.clientes || data.clientes.length == 0){\n  $.send('output', { status: 'erro', mensagem: 'Cliente não encontrado com o documento informado.' });\n} else {\n  const cliente = data.clientes[0];\n  $.send('output', { id_cliente: cliente.id, nome: cliente.nome, contratos: cliente.contratos });\n}"
+            "code": "if(!data.clientes || data.clientes.length == 0){\n  $.send('output', { status: 'erro', mensagem: 'Registro não localizado com os dados informados.' });\n} else {\n  const cliente = data.clientes[0];\n  $.send('output', { id_cliente: cliente.id, nome: cliente.nome, contratos: cliente.contratos });\n}"
           },
           "component": "code",
           "connections": {
@@ -269,7 +268,7 @@ Regras e Diretrizes do Atendimento:
         "imbux3irv": {
           "id": "imbux3irv",
           "config": {
-            "url": "{{host}}/api/ura/fatura2via/",
+            "url": "{{host}}/v1/financeiro/faturas",
             "method": "POST"
           },
           "component": "request",
@@ -295,8 +294,8 @@ Regras e Diretrizes do Atendimento:
         }
       }
     };
-    setRawJson(JSON.stringify(exampleSgp, null, 2));
-    showToast('info', 'Exemplo SGP carregado! 2 Workflows extraídos automaticamente.');
+    setRawJson(JSON.stringify(exampleFlowstream, null, 2));
+    showToast('info', 'Exemplo FlowStream carregado! 2 Workflows extraídos automaticamente.');
   };
 
   // Helper to replace variables like {{host}}, {host}, {token}
@@ -383,7 +382,7 @@ Regras e Diretrizes do Atendimento:
           .replace(/_/g, ' ')
           .replace(/-/g, ' ')
           .replace(/\b\w/g, c => c.toUpperCase());
-        const wfName = `SGP - ${cleanName || `Operação ${routeIndex + 1}`}`;
+        const wfName = cleanName || `Operação ${routeIndex + 1}`;
 
         // Traverse down the chain
         const visited = new Set<string>();
@@ -420,9 +419,9 @@ Regras e Diretrizes do Atendimento:
         // Parameter detection
         const firstCode = codeNodes[0]?.node?.config?.code || '';
         let detectedParam = 'cpfcnpj';
-        let paramDesc = 'CPF ou CNPJ do titular apenas números ou formatado.';
-        let userFacingPurpose = 'Consulta os dados cadastrais do cliente no SGP pelo CPF/CNPJ.';
-        let expectedReturns = 'ID do cliente, nome completo e lista de contratos ativos.';
+        let paramDesc = 'CPF, CNPJ ou código identificador do registro.';
+        let userFacingPurpose = 'Consulta os dados cadastrais do cliente via API.';
+        let expectedReturns = 'ID do cliente, nome completo e registros ativos.';
         
         if (rawPath.includes('fatura') || firstCode.includes('fatura')) {
           detectedParam = 'cpfcnpj';
@@ -442,7 +441,7 @@ Regras e Diretrizes do Atendimento:
         }
 
         // REST URL & Body
-        let finalUri = `${vars.host || 'https://www.centralbutanonet.com.br'}/${rawPath}`;
+        let finalUri = `${vars.host || 'https://api.empresa.com.br'}/${rawPath}`;
         let restHeaders: HeaderItem[] = [{ key: 'Content-Type', value: 'application/json' }];
         let restBody = '';
         let finalMethod: any = routeMethod || 'POST';
@@ -467,7 +466,7 @@ Regras e Diretrizes do Atendimento:
         // Default Body with token/app
         if (vars.token || vars.app) {
           restBody = JSON.stringify({
-            app: vars.app || 'SZ.CHAT',
+            app: vars.app || 'FORTICS.AI',
             token: vars.token || '',
             [detectedParam]: `{{request.${detectedParam}}}`
           }, null, 2);
@@ -652,9 +651,9 @@ Regras e Diretrizes do Atendimento:
 
     return {
       id: crypto.randomUUID(),
-      name: streamName || 'SGP Atendimento Inteligente',
-      description: 'Agente de atendimento integrado ao SGP e Total.js FlowStream.',
-      audience: 'Clientes e assinantes do provedor de internet e serviços.',
+      name: streamName || 'Atendimento Inteligente API',
+      description: 'Agente de atendimento integrado ao FlowStream e APIs REST.',
+      audience: 'Clientes e usuários que utilizam o canal de atendimento.',
       cat: 'suporte_tecnico',
       color: '#10b981',
       icon: 'avatar-4',
@@ -677,13 +676,13 @@ Regras e Diretrizes do Atendimento:
       media_upload_enabled: false,
       offset: 'America/Sao_Paulo',
       instruction: {
-        objective: 'Atender clientes, realizar consultas cadastrais e emissão de segunda via com integração SGP.',
-        role: 'Você é o Agente Virtual especialista em atendimento ao assinante. Siga os seguintes passos:',
+        objective: 'Atender clientes, realizar consultas cadastrais e operações integradas via API.',
+        role: 'Você é o Agente Virtual especialista em atendimento integrado. Siga os seguintes passos:',
         steps: cleanSteps.length > 0 ? cleanSteps : [
           'Cumprimentar o cliente e identificar pelo nome',
-          'Pedir o CPF ou CNPJ do titular',
-          'Consultar o cadastro do cliente via integração SGP',
-          'Exibir contratos e atender a solicitação com agilidade'
+          'Pedir o CPF, CNPJ ou dado identificador',
+          'Consultar os dados cadastrais via integração API',
+          'Apresentar os registros encontrados e atender a solicitação com agilidade'
         ]
       },
       other_rules: `# REGRAS E DIRETRIZES DO AGENTE (COMO FAZER)\n\n${agentRules}`
@@ -767,10 +766,10 @@ Regras e Diretrizes do Atendimento:
   };
 
   // Preset snippets for tratar_dados code
-  const applyTratarPreset = (type: 'sgp' | 'universal' | 'raw' | 'clean' | 'array') => {
+  const applyTratarPreset = (type: 'padrao' | 'universal' | 'raw' | 'clean' | 'array') => {
     if (!routeDrafts[activeRouteIndex]) return;
     let code = '';
-    if (type === 'sgp') {
+    if (type === 'padrao') {
       code = `try {\n    let raw = _vars.resposta_api;\n    if (typeof raw === 'string') {\n        try { raw = JSON.parse(raw); } catch(e) {}\n    }\n    if (raw && raw.msg && !raw.status) {\n        return { status: 'alerta', mensagem: raw.msg };\n    }\n    return {\n        status: 'sucesso',\n        dados: raw\n    };\n} catch (e) {\n    return { status: 'erro', mensagem: 'Erro ao processar retorno da API', detalhes: String(e) };\n}`;
     } else if (type === 'universal') {
       code = `try {\n    let raw = _vars.resposta_api;\n    if (typeof raw === 'string') {\n        try { raw = JSON.parse(raw); } catch(e) {}\n    }\n    // Validação de erros comuns em REST APIs (CRM, ERP, Webhooks, etc)\n    if (raw && (raw.error || raw.erro || raw.status === 'error' || raw.status === 'erro')) {\n        return { status: 'erro', mensagem: raw.message || raw.mensagem || 'Falha na requisição da API' };\n    }\n    return {\n        status: 'sucesso',\n        dados: raw\n    };\n} catch (e) {\n    return { status: 'erro', mensagem: 'Falha ao tratar retorno da API', detalhes: String(e) };\n}`;
@@ -1060,7 +1059,7 @@ Regras e Diretrizes do Atendimento:
       } else if (onWorkflowsConverted) {
         onWorkflowsConverted(convertedWorkflows);
       }
-      showToast('success', '✨ Agente Oficial e Workflows SGP gerados e integrados com sucesso!');
+      showToast('success', '✨ Agente Oficial e Workflows gerados e integrados com sucesso!');
     } catch (err: any) {
       showToast('error', err.message || 'Erro ao processar com IA.');
     } finally {
@@ -1136,18 +1135,18 @@ Regras e Diretrizes do Atendimento:
               </h2>
             </div>
             <p className="text-xs text-slate-400 max-w-3xl leading-relaxed">
-              Escreva as instruções do atendimento em <strong>texto livre</strong> (a IA separa automaticamente os <strong>Passos</strong> e as <strong>Regras</strong>) e cole o JSON do <strong>FlowStream / SGP</strong>. Ele gera o <strong>Agente Oficial Fortics</strong> e todos os <strong>Workflows (.json)</strong> integrados!
+              Escreva as instruções do atendimento em <strong>texto livre</strong> (a IA separa automaticamente os <strong>Passos</strong> e as <strong>Regras</strong>) e cole o JSON do <strong>FlowStream</strong>. Ele gera o <strong>Agente Oficial Fortics</strong> e todos os <strong>Workflows (.json)</strong> integrados!
             </p>
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-center">
             <button
               type="button"
-              onClick={loadExampleSgp}
+              onClick={loadExampleFlowstream}
               className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Carregar Exemplo SGP</span>
+              <span>Carregar Exemplo FlowStream</span>
             </button>
           </div>
         </div>
@@ -1206,7 +1205,7 @@ Regras e Diretrizes do Atendimento:
                 value={freeformPrompt}
                 onChange={(e) => handleFreeformPromptChange(e.target.value)}
                 rows={10}
-                placeholder="Exemplo: Cumprimentar o cliente, pedir CPF/CNPJ, consultar cadastro no SGP, listar contratos e emitir 2ª via se solicitado. Regras: validar CPF com 11 dígitos, pedir confirmação antes de gravar..."
+                placeholder="Exemplo: Cumprimentar o cliente, pedir CPF/CNPJ, consultar cadastro na API, listar registros e emitir 2ª via se solicitado. Regras: validar parâmetros, pedir confirmação antes de gravar..."
                 className="w-full h-52 bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs font-sans text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all resize-y leading-relaxed"
               />
             </div>
@@ -1246,13 +1245,13 @@ Regras e Diretrizes do Atendimento:
           </div>
         </div>
 
-        {/* Right Box: JSON do FlowStream / Total.js (SGP) */}
+        {/* Right Box: JSON do FlowStream / Total.js */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3.5 flex flex-col justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-xs font-bold text-white flex items-center gap-2">
                 <FileJson className="w-4 h-4 text-emerald-400" />
-                <span>JSON do FlowStream / SGP (Total.js)</span>
+                <span>JSON do FlowStream (Total.js)</span>
               </label>
 
               {routeDrafts.length > 0 && (
@@ -1264,7 +1263,7 @@ Regras e Diretrizes do Atendimento:
             </div>
 
             <p className="text-[11px] text-slate-400">
-              Cole o JSON exportado do FlowStream / SGP. As variáveis de host, token e rotas são extraídas automaticamente.
+              Cole o JSON exportado do FlowStream. As variáveis de host, token e rotas são extraídas automaticamente.
             </p>
           </div>
 
@@ -1273,7 +1272,7 @@ Regras e Diretrizes do Atendimento:
               value={rawJson}
               onChange={(e) => setRawJson(e.target.value)}
               rows={10}
-              placeholder='Cole aqui o JSON do FlowStream:&#10;{&#10;  "id": "...",&#10;  "name": "SGP - URA e Central",&#10;  "variables": { "host": "https://...", "token": "..." },&#10;  "design": { ... }&#10;}'
+              placeholder='Cole aqui o JSON do FlowStream:&#10;{&#10;  "id": "...",&#10;  "name": "Integração API",&#10;  "variables": { "host": "https://...", "token": "..." },&#10;  "design": { ... }&#10;}'
               className="w-full h-52 bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs font-mono text-emerald-300 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all resize-y leading-relaxed"
             />
           </div>
@@ -1352,7 +1351,7 @@ Regras e Diretrizes do Atendimento:
                 }`}
               >
                 <Boxes className="w-3.5 h-3.5" />
-                <span>Workflows SGP ({routeDrafts.length})</span>
+                <span>Workflows da API ({routeDrafts.length})</span>
               </button>
 
               <button
@@ -1552,7 +1551,7 @@ Regras e Diretrizes do Atendimento:
                     </div>
                   </div>
 
-                  {/* 🌐 SEÇÃO REST API & cURL (UNIVERSAL PARA QUALQUER SISTEMA / SGP / ERP / CRM) */}
+                  {/* 🌐 SEÇÃO REST API & cURL (UNIVERSAL PARA QUALQUER SISTEMA / ERP / CRM / WEBHOOK) */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
                       <div className="flex items-center gap-2">
@@ -1561,7 +1560,7 @@ Regras e Diretrizes do Atendimento:
                         </div>
                         <div>
                           <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                            🌐 Requisição REST & cURL (Qualquer API / ERP / CRM / SGP)
+                            🌐 Requisição REST & cURL (Qualquer API / ERP / CRM / Webhook)
                           </h4>
                           <p className="text-[10px] text-slate-400">Configure o endpoint da sua API ou importe diretamente colando um comando cURL</p>
                         </div>
@@ -1898,11 +1897,11 @@ Regras e Diretrizes do Atendimento:
                               </button>
                               <button
                                 type="button"
-                                onClick={() => applyTratarPreset('sgp')}
+                                onClick={() => applyTratarPreset('padrao')}
                                 className="px-1.5 py-0.5 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded cursor-pointer transition-colors"
-                                title="Aplica tratamento padrão SGP"
+                                title="Aplica tratamento padrão para APIs REST"
                               >
-                                🌐 SGP
+                                🏢 Padrão
                               </button>
                               <button
                                 type="button"
