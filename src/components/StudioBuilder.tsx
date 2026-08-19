@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Sparkles, 
-  Plus, 
-  Trash2, 
-  Layers, 
-  CheckCircle2, 
-  Workflow, 
-  FileCode2, 
-  ArrowUp, 
-  ArrowDown, 
-  Key, 
-  Sliders, 
-  ChevronDown, 
-  ChevronUp, 
-  Lock, 
-  Eye, 
+import {
+  Sparkles,
+  Plus,
+  Trash2,
+  Layers,
+  CheckCircle2,
+  Workflow,
+  FileCode2,
+  ArrowUp,
+  ArrowDown,
+  Key,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
+  Lock,
+  Eye,
   EyeOff,
   Globe,
   Database,
@@ -29,70 +29,127 @@ import {
   Zap,
   BrainCircuit,
   Wrench,
-  Edit3
+  Edit3,
+  Bookmark,
+  Check,
+  Server
 } from 'lucide-react';
-import { 
-  GenerationRequest, 
-  ForticsAgent, 
-  ForticsWorkflow, 
-  OrderedApiStep, 
+import {
+  GenerationRequest,
+  ForticsAgent,
+  ForticsWorkflow,
+  OrderedApiStep,
   ConfiguredWorkflow,
   AuthRouteConfig,
   CurlItem
 } from '../types/fortics';
+import { TEMPLATES_LIBRARY } from '../data/forticsStandards';
+
+export const PROVIDER_MODELS: Record<'gemini' | 'openai' | 'anthropic', Array<{ id: string; name: string; tag?: string }>> = {
+  openai: [
+    { id: 'gpt-5.6-sol', name: 'gpt-5.6-sol', tag: '🧠 Máxima capacidade | ⭐⭐⭐⭐⭐' },
+    { id: 'gpt-5.6-terra', name: 'gpt-5.6-terra', tag: '⚖️ Inteligência + custo | ⭐⭐⭐⭐⭐' },
+    { id: 'gpt-5.6-luna', name: 'gpt-5.6-luna', tag: '🚀 Alto volume + custo | ⭐⭐⭐⭐⭐' },
+    { id: 'gpt-5.5', name: 'gpt-5.5', tag: 'Muito poderoso | ⭐⭐⭐⭐⭐' },
+    { id: 'gpt-5.4', name: 'gpt-5.4', tag: 'Excelente equilíbrio | ⭐⭐⭐⭐⭐' },
+    { id: 'gpt-5.4-mini', name: 'gpt-5.4-mini', tag: 'Rápido e barato | ⭐⭐⭐⭐' },
+    { id: 'gpt-5.4-nano', name: 'gpt-5.4-nano', tag: 'Extremamente econômico | ⭐⭐⭐' },
+    { id: 'gpt-5.5-pro', name: 'gpt-5.5-pro', tag: 'Raciocínio avançado | ⭐⭐⭐⭐' },
+    { id: 'gpt-5.4-pro', name: 'gpt-5.4-pro', tag: 'Raciocínio avançado | ⭐⭐⭐⭐' },
+    { id: 'chat-latest', name: 'chat-latest', tag: 'Otimizado para chat | ⭐⭐⭐⭐⭐' }
+  ],
+  anthropic: [
+    { id: 'claude-opus-5', name: 'claude-opus-5', tag: 'Máximo raciocínio/qualidade | ⭐⭐⭐⭐⭐' },
+    { id: 'claude-opus-4-8', name: 'claude-opus-4-8', tag: 'Raciocínio avançado | ⭐⭐⭐⭐⭐' },
+    { id: 'claude-opus-4-7', name: 'claude-opus-4-7', tag: 'Agentes complexos | ⭐⭐⭐⭐⭐' },
+    { id: 'claude-opus-4-6', name: 'claude-opus-4-6', tag: 'Agentes + contexto longo | ⭐⭐⭐⭐⭐' },
+    { id: 'claude-sonnet-5', name: 'claude-sonnet-5', tag: 'Melhor equilíbrio geral | ⭐⭐⭐⭐⭐' },
+    { id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6', tag: 'Produção / chatbot | ⭐⭐⭐⭐⭐' },
+    { id: 'claude-sonnet-4-5', name: 'claude-sonnet-4-5', tag: 'Chat + ferramentas | ⭐⭐⭐⭐' },
+    { id: 'claude-haiku-4-5', name: 'claude-haiku-4-5', tag: 'Alta velocidade / baixo custo | ⭐⭐⭐⭐' },
+    { id: 'claude-opus-4-5', name: 'claude-opus-4-5', tag: 'Raciocínio avançado | ⭐⭐⭐⭐⭐' },
+    { id: 'claude-sonnet-4', name: 'claude-sonnet-4', tag: 'Legado | ⭐⭐⭐⭐' }
+  ],
+  gemini: [
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', tag: 'Padrão Localhost Rápido' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', tag: 'Raciocínio de Ponta' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', tag: 'Geração Rápida' },
+    { id: 'gemini-2.0-flash-thinking-exp-01-21', name: 'Gemini 2.0 Flash Thinking', tag: 'Raciocínio Explicativo' },
+    { id: 'gemini-2.0-pro-exp-02-05', name: 'Gemini 2.0 Pro Exp', tag: 'Experimental' },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', tag: '2 Milhões Contexto' },
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', tag: 'Estável' },
+    { id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash 8B', tag: 'Micro' },
+    { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash', tag: 'Preview' }
+  ]
+};
 
 interface StudioBuilderProps {
   onGenerate: (req: GenerationRequest) => Promise<void>;
   isGenerating: boolean;
   currentAgent: ForticsAgent | null;
   currentWorkflow: ForticsWorkflow | null;
+  onSelectExternalTemplate?: (templateId: string) => void;
 }
 
 export const StudioBuilder: React.FC<StudioBuilderProps> = ({
   onGenerate,
   isGenerating,
 }) => {
-  // Provider and Keys state
+  // Provider and Keys state backed by sessionStorage (with fallback to localStorage)
   const [provider, setProvider] = useState<'gemini' | 'openai' | 'anthropic'>(() => {
-    return (localStorage.getItem('fortics_llm_provider') as any) || 'gemini';
-  });
-  
-  const [model, setModel] = useState<string>(() => {
-    return localStorage.getItem('fortics_llm_model') || 'gemini-3.7-flash';
+    return (sessionStorage.getItem('fortics_llm_provider') as any) ||
+      (localStorage.getItem('fortics_llm_provider') as any) ||
+      'gemini';
   });
 
-  const [geminiKey, setGeminiKey] = useState<string>(() => localStorage.getItem('fortics_gemini_key') || '');
-  const [openaiKey, setOpenaiKey] = useState<string>(() => localStorage.getItem('fortics_openai_key') || '');
-  const [anthropicKey, setAnthropicKey] = useState<string>(() => localStorage.getItem('fortics_anthropic_key') || '');
+  const [model, setModel] = useState<string>(() => {
+    return sessionStorage.getItem('fortics_llm_model') ||
+      localStorage.getItem('fortics_llm_model') ||
+      'gemini-2.5-flash';
+  });
+
+  const [geminiKey, setGeminiKey] = useState<string>(() =>
+    sessionStorage.getItem('fortics_gemini_key') || localStorage.getItem('fortics_gemini_key') || ''
+  );
+  const [openaiKey, setOpenaiKey] = useState<string>(() =>
+    sessionStorage.getItem('fortics_openai_key') || localStorage.getItem('fortics_openai_key') || ''
+  );
+  const [anthropicKey, setAnthropicKey] = useState<string>(() =>
+    sessionStorage.getItem('fortics_anthropic_key') || localStorage.getItem('fortics_anthropic_key') || ''
+  );
   const [showApiKeySettings, setShowApiKeySettings] = useState<boolean>(false);
   const [showKeyVisible, setShowKeyVisible] = useState<boolean>(false);
 
-  // Sync to localStorage
+  // Sync to sessionStorage & localStorage
   useEffect(() => {
+    sessionStorage.setItem('fortics_llm_provider', provider);
     localStorage.setItem('fortics_llm_provider', provider);
   }, [provider]);
 
   useEffect(() => {
+    sessionStorage.setItem('fortics_llm_model', model);
     localStorage.setItem('fortics_llm_model', model);
   }, [model]);
 
   useEffect(() => {
+    sessionStorage.setItem('fortics_gemini_key', geminiKey);
     localStorage.setItem('fortics_gemini_key', geminiKey);
   }, [geminiKey]);
 
   useEffect(() => {
+    sessionStorage.setItem('fortics_openai_key', openaiKey);
     localStorage.setItem('fortics_openai_key', openaiKey);
   }, [openaiKey]);
 
   useEffect(() => {
+    sessionStorage.setItem('fortics_anthropic_key', anthropicKey);
     localStorage.setItem('fortics_anthropic_key', anthropicKey);
   }, [anthropicKey]);
 
   const handleProviderChange = (newProvider: 'gemini' | 'openai' | 'anthropic') => {
     setProvider(newProvider);
-    if (newProvider === 'gemini') setModel('gemini-3.7-flash');
-    else if (newProvider === 'openai') setModel('gpt-4o');
-    else if (newProvider === 'anthropic') setModel('claude-3-7-sonnet-20250219');
+    const defaultModel = PROVIDER_MODELS[newProvider][0].id;
+    setModel(defaultModel);
   };
 
   // Agent Identification & Role
@@ -101,11 +158,11 @@ export const StudioBuilder: React.FC<StudioBuilderProps> = ({
   );
 
   // Input Mode: 'freeform' (Prompt Único onde a IA separa Passos e Regras) vs 'structured' (Passos e Regras em caixas separadas)
-  const [inputMode, setInputMode] = useState<'freeform' | 'structured'>('freeform');
+  const [inputMode, setInputMode] = useState<'freeform' | 'structured' | 'workflow_driven'>('workflow_driven');
 
   // Unified Freeform Prompt
   const [freeformPrompt, setFreeformPrompt] = useState<string>(
-`- Cumprimentar o cliente e identificar pelo nome
+    `- Cumprimentar o cliente e identificar pelo nome
 - Pedir o CPF ou CNPJ do titular do contrato
 - Consultar o cadastro do cliente via integração para verificar se o contrato está ativo
 - Identificar qual sistema ou módulo apresenta problema
@@ -126,7 +183,7 @@ Regras e Validações de Negócio:
 
   // 1. Steps (O QUE FAZER -> instruction.steps)
   const [naturalSteps, setNaturalSteps] = useState<string>(
-`- Cumprimentar o cliente e identificar pelo nome
+    `- Cumprimentar o cliente e identificar pelo nome
 - Pedir o CPF ou CNPJ do titular do contrato
 - Consultar o cadastro do cliente via integração
 - Identificar qual sistema ou módulo apresenta problema
@@ -138,14 +195,7 @@ Regras e Validações de Negócio:
   );
 
   // 2. Rules & Validations (COMO FAZER -> other_rules)
-  const [naturalRules, setNaturalRules] = useState<string>(
-`- O CPF deve ser validado e formatado no padrão XXX.XXX.XXX-XX ou apenas 11 dígitos numéricos
-- O CNPJ deve ser validado no padrão XX.XXX.XXX/XXXX-XX ou apenas 14 dígitos numéricos
-- Solicitar confirmação expressa do cliente (Sim/Não) com resumo antes de disparar o workflow
-- Não alucinar prazos ou protocolos; repassar estritamente o retornado pela integração
-- Se o cliente solicitar atendente humano ou demonstrar insatisfação, retornar SOMENTE #SUPORTE_HUMANO
-- Respeitar escopo mono skill e manter foco estrito no atendimento de suporte`
-  );
+  const [naturalRules, setNaturalRules] = useState<string>('');
 
   // Sync helpers between freeform prompt and structured steps/rules
   const handleFreeformPromptChange = (text: string) => {
@@ -241,7 +291,7 @@ Regras e Validações de Negócio:
     {
       id: 'curl-1',
       name: '1. Buscar Cliente por CPF / Documento',
-      curl: "curl --location 'https://gogenier.pertec.net.br:8002/api/clientes/buscar?cpf=07395837355' \\\n--header 'Authorization: Bearer l1nR4i4JqPdErQJRDrZ-CMUCLlTJTte3gBS-3kmuRE6LHLMMZNxPqVxxT-pfb6Up'",
+      curl: "curl --location 'https://api.exemplo.com.br/v1/clientes/buscar?cpf=07395837355' \\\n--header 'Authorization: Bearer seu_token_jwt_aqui'",
       responseSample: '{\n  "result": {\n    "items": [\n      {\n        "id": 1,\n        "crm": 7308,\n        "nin": "07674944905",\n        "name": "Bruno Diniz - CLINIC",\n        "specialist": "Físico médico",\n        "sector": "CAIXA"\n      }\n    ]\n  }\n}',
       filterRules: 'Extrair o ID do cliente, nome e especialidade para exibir na conversa antes de invocar a próxima chamada.'
     }
@@ -295,124 +345,59 @@ Regras e Validações de Negócio:
     setCurlList(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
-  // Workflow Management
-  const handleAddWorkflow = () => {
-    const nextIdx = configuredWorkflows.length + 1;
-    const newWf: ConfiguredWorkflow = {
-      id: `wf-${Date.now()}`,
-      name: `Novo Workflow ${nextIdx}`,
-      description: `Finalidade do workflow ${nextIdx}`,
-      apiCalls: [
-        {
-          id: `step-${Date.now()}`,
-          order: 1,
-          name: `API de ${nextIdx === 2 ? 'Registro' : 'Operação'}`,
-          method: nextIdx === 2 ? 'POST' : 'GET',
-          pathOrUrl: 'https://api.empresa.com.br/v1/endpoint',
-          requiredInputData: 'parâmetros coletados no chat',
-          requestBodySample: '{\n  "campo": "{{request.campo}}"\n}',
-          responseSample: '{\n  "status": "sucesso",\n  "protocolo": "2026-001"\n}',
-          purposeDescription: 'Execução de integração da ferramenta'
-        }
-      ]
-    };
-    setConfiguredWorkflows(prev => [...prev, newWf]);
-    setSelectedWorkflowId(newWf.id);
+  const handleMoveCurlUp = (index: number) => {
+    if (index === 0) return;
+    setCurlList(prev => {
+      const updated = [...prev];
+      const temp = updated[index - 1];
+      updated[index - 1] = updated[index];
+      updated[index] = temp;
+      return updated;
+    });
   };
 
-  const handleRemoveWorkflow = (wfId: string) => {
-    if (configuredWorkflows.length <= 1) {
-      alert('É necessário ter ao menos 1 workflow configurado.');
-      return;
-    }
-    const remaining = configuredWorkflows.filter(w => w.id !== wfId);
-    setConfiguredWorkflows(remaining);
-    if (selectedWorkflowId === wfId) {
-      setSelectedWorkflowId(remaining[0].id);
-    }
+  const handleMoveCurlDown = (index: number) => {
+    if (index >= curlList.length - 1) return;
+    setCurlList(prev => {
+      const updated = [...prev];
+      const temp = updated[index + 1];
+      updated[index + 1] = updated[index];
+      updated[index] = temp;
+      return updated;
+    });
   };
 
-  const handleUpdateWorkflowInfo = (wfId: string, field: 'name' | 'description', value: string) => {
-    setConfiguredWorkflows(prev =>
-      prev.map(w => (w.id === wfId ? { ...w, [field]: value } : w))
-    );
-  };
-
-  // API Call Management inside Selected Workflow
-  const handleAddApiCall = (wfId: string) => {
-    setConfiguredWorkflows(prev =>
-      prev.map(w => {
-        if (w.id !== wfId) return w;
-        const newOrder = w.apiCalls.length + 1;
-        const newStep: OrderedApiStep = {
-          id: `call-${Date.now()}`,
-          order: newOrder,
-          name: `Integração REST ${newOrder}`,
-          method: 'GET',
-          pathOrUrl: 'https://api.empresa.com.br/v1/rota',
-          requiredInputData: 'parâmetros coletados',
-          requestBodySample: '',
-          responseSample: '{\n  "status": "sucesso"\n}',
-          purposeDescription: 'Execução de chamada REST'
-        };
-        return { ...w, apiCalls: [...w.apiCalls, newStep] };
-      })
-    );
-  };
-
-  const handleRemoveApiCall = (wfId: string, callId: string) => {
-    setConfiguredWorkflows(prev =>
-      prev.map(w => {
-        if (w.id !== wfId) return w;
-        const filtered = w.apiCalls.filter(c => c.id !== callId);
-        return {
-          ...w,
-          apiCalls: filtered.map((c, idx) => ({ ...c, order: idx + 1 }))
-        };
-      })
-    );
-  };
-
-  const handleUpdateApiCall = (
-    wfId: string,
-    callId: string,
-    field: keyof OrderedApiStep,
-    value: any
-  ) => {
-    setConfiguredWorkflows(prev =>
-      prev.map(w => {
-        if (w.id !== wfId) return w;
-        return {
-          ...w,
-          apiCalls: w.apiCalls.map(c => (c.id === callId ? { ...c, [field]: value } : c))
-        };
-      })
-    );
-  };
-
-  const handleMoveApiCall = (wfId: string, index: number, direction: 'up' | 'down') => {
-    setConfiguredWorkflows(prev =>
-      prev.map(w => {
-        if (w.id !== wfId) return w;
-        const newCalls = [...w.apiCalls];
-        const targetIdx = direction === 'up' ? index - 1 : index + 1;
-        if (targetIdx < 0 || targetIdx >= newCalls.length) return w;
-        const temp = newCalls[index];
-        newCalls[index] = newCalls[targetIdx];
-        newCalls[targetIdx] = temp;
-        return {
-          ...w,
-          apiCalls: newCalls.map((c, idx) => ({ ...c, order: idx + 1 }))
-        };
-      })
-    );
-  };
-
-  const [studioMode, setStudioMode] = useState<'both' | 'workflow_only' | 'agent_only'>('both');
+  const [studioMode, setStudioMode] = useState<'both' | 'workflow_only'>('both');
+  const [showArchitectureGuide, setShowArchitectureGuide] = useState<boolean>(false);
   const [agentToolsInput, setAgentToolsInput] = useState<string>(
     'consultar_cadastro(cpf): Consulta os dados cadastrais do cliente\nemitir_segunda_via(id_contrato): Gera a 2ª via da fatura'
   );
   const [agentTransferTag, setAgentTransferTag] = useState<string>('#SUPORTE_HUMANO');
+
+  // Load standard template helper
+  const handleLoadTemplate = (tplId: string) => {
+    const tpl = TEMPLATES_LIBRARY.find(t => t.id === tplId);
+    if (!tpl) return;
+
+    setBusinessContext(tpl.sampleAgent.description || tpl.title);
+    setNaturalSteps(tpl.sampleAgent.instruction.steps.map(s => `- ${s}`).join('\n'));
+    setNaturalRules(tpl.sampleAgent.other_rules);
+    setFreeformPrompt(`PASSOS DO ATENDIMENTO:\n${tpl.sampleAgent.instruction.steps.map(s => `- ${s}`).join('\n')}\n\nREGRAS E VALIDAÇÕES:\n${tpl.sampleAgent.other_rules}`);
+
+    // Map sample workflow
+    if (tpl.sampleWorkflow) {
+      const restNodes = tpl.sampleWorkflow.flow.filter(n => n.type === 'rest') as any[];
+      if (restNodes.length > 0) {
+        setCurlList(restNodes.map((n, idx) => ({
+          id: `curl-${idx + 1}`,
+          name: `${idx + 1}. ${n.name || 'Integração REST'}`,
+          curl: `curl --location '${n.uri || 'https://api.empresa.com.br'}' \\\n--header 'Content-Type: application/json'`,
+          responseSample: '{\n  "status": "sucesso",\n  "resultado": "OK"\n}',
+          filterRules: 'Extrair campos chave e repassar para a resposta'
+        })));
+      }
+    }
+  };
 
   // Submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -422,14 +407,14 @@ Regras e Validações de Negócio:
     if (provider === 'openai') {
       activeKey = openaiKey.trim();
       if (!activeKey) {
-        alert('Por favor, informe sua chave OpenAI API (sk-...) nas configurações.');
+        alert('Por favor, informe sua chave OpenAI API (sk-...) nas configurações de IA.');
         setShowApiKeySettings(true);
         return;
       }
     } else if (provider === 'anthropic') {
       activeKey = anthropicKey.trim();
       if (!activeKey) {
-        alert('Por favor, informe sua chave Anthropic API (sk-ant-...) nas configurações.');
+        alert('Por favor, informe sua chave Anthropic API (sk-ant-...) nas configurações de IA.');
         setShowApiKeySettings(true);
         return;
       }
@@ -437,16 +422,33 @@ Regras e Validações de Negócio:
       activeKey = geminiKey.trim();
     }
 
-    const combinedAlgorithm = `PASSOS (O QUE FAZER):\n${naturalSteps}\n\nREGRAS (COMO FAZER):\n${naturalRules}${studioMode === 'agent_only' && agentTransferTag ? `\n- Se o cliente solicitar atendente humano, use a tag ${agentTransferTag}` : ''}`;
+    let effectiveSteps = naturalSteps;
+    if (inputMode === 'workflow_driven') {
+      const activeCurls = curlList.filter(c => c.curl.trim() || c.responseSample?.trim() || c.filterRules?.trim());
+      const cleanWfName = (raw: string) => (raw || 'Consulta de Informações').replace(/^[0-9.\-_ ]+/, '').trim().toLowerCase();
+      effectiveSteps = [
+        'Cumprimentar o cliente e solicitar documento/parâmetro inicial',
+        ...activeCurls.map((c, idx) => {
+          const name = cleanWfName(c.name);
+          return idx === 0
+            ? `Executar a ${name} com o documento informado`
+            : `Com o identificador retornado na etapa anterior, executar a ${name}`;
+        }),
+        'Confirmar os dados e entregar o resultado estruturado ao cliente'
+      ].join('\n');
+    }
 
-    // Flatten all API calls for backward compatibility
+    const combinedAlgorithm = `PASSOS (O QUE FAZER):\n${effectiveSteps}\n\nREGRAS (COMO FAZER):\n${naturalRules}`;
+
+    // Flatten all API steps from configuredWorkflows
     const flatApiSteps: OrderedApiStep[] = [];
-    let currentGlobalOrder = 1;
+    let globalOrder = 1;
     configuredWorkflows.forEach(wf => {
       wf.apiCalls.forEach(call => {
         flatApiSteps.push({
           ...call,
-          order: currentGlobalOrder++
+          order: globalOrder++,
+          purposeDescription: `${wf.name}: ${call.purposeDescription || call.name}`
         });
       });
     });
@@ -459,21 +461,17 @@ Regras e Validações de Negócio:
       mode: 'new',
       studioMode,
       inputMode,
-      freeformPrompt: studioMode === 'agent_only' && agentToolsInput.trim()
-        ? `${freeformPrompt}\n\nFERRAMENTAS/TOOLS QUE O AGENTE POSSUI:\n${agentToolsInput}\nTAG DE TRANSBORDO: ${agentTransferTag}`
-        : freeformPrompt,
+      freeformPrompt,
       businessContext,
       naturalAlgorithm: combinedAlgorithm,
-      naturalSteps,
+      naturalSteps: effectiveSteps,
       naturalRules,
-      workflowArchitectureMode,
+      workflowArchitectureMode: workflowArchitectureMode as any,
       authRoute: authRoute.enabled ? authRoute : undefined,
       apiDocs: apiDocs.trim() ? apiDocs : undefined,
       responseModelSample: responseModelSample.trim() ? responseModelSample : undefined,
       businessFilters: businessFilters.trim() ? businessFilters : undefined,
       curlItems: curlList.filter(c => c.curl.trim() || c.responseSample?.trim() || c.filterRules?.trim()),
-      configuredWorkflows,
-      orderedApiSteps: flatApiSteps,
       options: {
         monoSkillEnforced: true,
         antiHallucinationStrict: true,
@@ -484,202 +482,281 @@ Regras e Validações de Negócio:
     });
   };
 
-  const activeWorkflow = configuredWorkflows.find(w => w.id === selectedWorkflowId) || configuredWorkflows[0];
-
   return (
-    <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6 max-w-full">
-      
-      {/* 0. Studio Mode Switcher: Agente + Workflow vs Apenas Workflow vs Apenas Agente */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 p-1.5 bg-slate-950 border border-slate-800 rounded-2xl">
+    <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-7 max-w-full">
+
+      {/* Studio Mode Switcher (2 Opções) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2 bg-[#061325]/90 border border-[#0066FF]/25 rounded-2xl shadow-inner">
         <button
           type="button"
           onClick={() => setStudioMode('both')}
-          className={`p-3 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 ${
-            studioMode === 'both'
-              ? 'bg-gradient-to-r from-emerald-600/90 to-teal-600/90 text-white shadow-lg shadow-emerald-950/60 ring-1 ring-emerald-400/50'
-              : 'bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-          }`}
+          className={`p-4 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3.5 border ${studioMode === 'both'
+            ? 'bg-gradient-to-r from-[#0066FF] to-[#0052FF] text-white shadow-xl shadow-[#0066FF]/35 border-[#00D2FF]/40'
+            : 'bg-[#020b18]/60 text-slate-400 hover:text-slate-200 hover:bg-[#0066FF]/10 border-transparent'
+            }`}
         >
-          <div className={`p-2 rounded-lg ${studioMode === 'both' ? 'bg-white/20' : 'bg-slate-800 text-emerald-400'}`}>
-            <Sparkles className="w-4 h-4" />
+          <div className={`p-2.5 rounded-xl ${studioMode === 'both' ? 'bg-white/20 text-white' : 'bg-[#061833] text-[#0066FF]'}`}>
+            <Sparkles className="w-5 h-5" />
           </div>
-          <div className="min-w-0">
-            <div className="text-xs font-bold truncate">Agente + Workflows</div>
-            <div className={`text-[10px] truncate ${studioMode === 'both' ? 'text-emerald-100' : 'text-slate-500'}`}>
-              Criação & Integração Completa
-            </div>
+          <div>
+            <div className="text-xs font-bold text-white">Agente + Workflows (Completo)</div>
+            <div className="text-[10px] text-slate-300 opacity-90">Gera agente.json e workflows conectados às APIs</div>
           </div>
         </button>
 
         <button
           type="button"
           onClick={() => setStudioMode('workflow_only')}
-          className={`p-3 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 ${
-            studioMode === 'workflow_only'
-              ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-950/60 ring-1 ring-cyan-400/50'
-              : 'bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-          }`}
+          className={`p-4 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3.5 border ${studioMode === 'workflow_only'
+            ? 'bg-gradient-to-r from-[#0066FF] to-[#0052FF] text-white shadow-xl shadow-[#0066FF]/35 border-[#00D2FF]/40'
+            : 'bg-[#020b18]/60 text-slate-400 hover:text-slate-200 hover:bg-[#0066FF]/10 border-transparent'
+            }`}
         >
-          <div className={`p-2 rounded-lg ${studioMode === 'workflow_only' ? 'bg-white/20' : 'bg-slate-800 text-cyan-400'}`}>
-            <Zap className="w-4 h-4" />
+          <div className={`p-2.5 rounded-xl ${studioMode === 'workflow_only' ? 'bg-white/20 text-white' : 'bg-[#061833] text-[#00D2FF]'}`}>
+            <Workflow className="w-5 h-5" />
           </div>
-          <div className="min-w-0">
-            <div className="text-xs font-bold truncate">Apenas Workflows & APIs</div>
-            <div className={`text-[10px] truncate ${studioMode === 'workflow_only' ? 'text-cyan-100' : 'text-slate-500'}`}>
-              Nós REST, cURLs, Modelos & JSON
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setStudioMode('agent_only')}
-          className={`p-3 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 ${
-            studioMode === 'agent_only'
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/60 ring-1 ring-indigo-400/50'
-              : 'bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-          }`}
-        >
-          <div className={`p-2 rounded-lg ${studioMode === 'agent_only' ? 'bg-white/20' : 'bg-slate-800 text-indigo-400'}`}>
-            <BrainCircuit className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs font-bold truncate">Apenas Agente Fortics</div>
-            <div className={`text-[10px] truncate ${studioMode === 'agent_only' ? 'text-indigo-100' : 'text-slate-500'}`}>
-              Prompt, Steps, Rules, Tools & Tags
-            </div>
+          <div>
+            <div className="text-xs font-bold text-white">Apenas Workflows (cURL / REST / Pipeline)</div>
+            <div className="text-[10px] text-slate-300 opacity-90">Gera fluxos com instruções, request, REST em cadeia e retorno</div>
           </div>
         </button>
       </div>
 
-      {/* 1. Top Bar: Title & Model Selector Settings */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
-        <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            {studioMode === 'both' && <Sparkles className="w-5 h-5 text-emerald-400" />}
-            {studioMode === 'workflow_only' && <Zap className="w-5 h-5 text-cyan-400" />}
-            {studioMode === 'agent_only' && <BrainCircuit className="w-5 h-5 text-indigo-400" />}
-            <span>
-              {studioMode === 'both' && 'Configuração Integrada: Agente & Workflows'}
-              {studioMode === 'workflow_only' && 'Configurador & Editor de Workflows Fortics'}
-              {studioMode === 'agent_only' && 'Configurador & Editor de Agente Fortics'}
-            </span>
-          </h2>
-          <p className="text-xs text-slate-400">
-            {studioMode === 'both' && 'Defina o papel do bot, os passos de atendimento e os Workflows com suas APIs interligadas.'}
-            {studioMode === 'workflow_only' && 'Desenhe nós REST, rotas de autenticação, cURLs com modelos de resposta e gere arquivos .json de workflows.'}
-            {studioMode === 'agent_only' && 'Defina instruções (steps), regras de validação (other_rules), transbordo (#SUPORTE_HUMANO) e gere o agente.json.'}
-          </p>
-        </div>
-
-        {/* Engine Quick Selector */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => handleProviderChange('gemini')}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                provider === 'gemini' 
-                  ? 'bg-emerald-600 text-white font-semibold' 
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Gemini
-            </button>
-            <button
-              type="button"
-              onClick={() => handleProviderChange('openai')}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                provider === 'openai' 
-                  ? 'bg-indigo-600 text-white font-semibold' 
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              OpenAI
-            </button>
-            <button
-              type="button"
-              onClick={() => handleProviderChange('anthropic')}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                provider === 'anthropic' 
-                  ? 'bg-amber-600 text-white font-semibold' 
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Claude
-            </button>
+      {/* Model & API Key Configuration Accordion */}
+      <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 sm:p-5 transition-all">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400">
+              <Sliders className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-2">
+                <span>Motor de IA & Provedor</span>
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">
+                  {provider.toUpperCase()} : {model}
+                </span>
+                {provider === 'gemini' && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                    <Server className="w-3 h-3" />
+                    <span>Localhost Nativo</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {provider === 'gemini'
+                  ? 'Utilizando o motor Gemini integrado ao servidor local (sem necessidade de chave manual).'
+                  : provider === 'openai'
+                    ? 'Utilizando a API direta da OpenAI com sua chave de acesso.'
+                    : 'Utilizando a API direta da Anthropic (Claude) com sua chave de acesso.'}
+              </p>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowApiKeySettings(!showApiKeySettings)}
-            className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg transition-colors cursor-pointer"
-            title="Configurar chaves de API personalizadas"
-          >
-            <Sliders className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Optional Custom API Keys Dropdown */}
-      {showApiKeySettings && (
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3 animate-fadeIn">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs font-bold text-slate-200">Chaves de API Personalizadas (Opcional)</span>
-            </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowKeyVisible(!showKeyVisible)}
-              className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+              title={showKeyVisible ? 'Ocultar chaves' : 'Mostrar chaves'}
             >
               {showKeyVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              <span>{showKeyVisible ? 'Ocultar' : 'Mostrar'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowApiKeySettings(!showApiKeySettings)}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer flex items-center gap-2 border border-slate-700"
+            >
+              <Key className="w-3.5 h-3.5 text-amber-400" />
+              <span>{showApiKeySettings ? 'Recolher Painel de IA' : 'Configurar Provedor / Chaves'}</span>
+              {showApiKeySettings ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[10px] text-slate-400 mb-1">Gemini API Key (ou usa padrão)</label>
+        {/* Selected Provider Quick Row & Model Selector */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 mt-3 border-t border-slate-800/80">
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Provedor Ativo</label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleProviderChange('gemini')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 border ${provider === 'gemini'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60 shadow-md shadow-emerald-950/40'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+              >
+                <span>Gemini (Local)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleProviderChange('openai')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 border ${provider === 'openai'
+                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/60 shadow-md shadow-blue-950/40'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+              >
+                <span>OpenAI</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleProviderChange('anthropic')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 border ${provider === 'anthropic'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 shadow-md shadow-amber-950/40'
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+              >
+                <span>Claude</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Modelo ({PROVIDER_MODELS[provider].length} Oficiais + Custom)
+              </label>
+              <span className="text-[10px] text-emerald-400 font-mono">
+                ID Ativo: {model}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select
+                value={PROVIDER_MODELS[provider].some(m => m.id === model) ? model : 'custom'}
+                onChange={e => {
+                  if (e.target.value !== 'custom') {
+                    setModel(e.target.value);
+                  }
+                }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:border-emerald-500 focus:outline-none"
+              >
+                {PROVIDER_MODELS[provider].map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} {m.tag ? `(${m.tag})` : ''}
+                  </option>
+                ))}
+                <option value="custom">-- Outro modelo (digitar manualmente) --</option>
+              </select>
+
+              <input
+                type="text"
+                value={model}
+                onChange={e => setModel(e.target.value)}
+                placeholder="ID exato do modelo (ex: gpt-5.6-sol ou custom)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-300 font-mono focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Extended Credentials & Keys Settings Accordion */}
+        {showApiKeySettings && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 mt-4 border-t border-slate-800 text-xs">
+
+            {/* Google Gemini Card */}
+            <div className={`p-3.5 rounded-xl border transition-all space-y-2 ${provider === 'gemini' ? 'bg-slate-950 border-emerald-500/50 shadow-md' : 'bg-slate-950/40 border-slate-800'}`}>
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-200 flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="providerRadio"
+                    value="gemini"
+                    checked={provider === 'gemini'}
+                    onChange={() => handleProviderChange('gemini')}
+                    className="text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <span>Google Gemini</span>
+                </label>
+                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+                  Localhost Padrão
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Usa a API nativa do servidor local. Se desejar usar uma chave customizada, informe abaixo:
+              </p>
               <input
                 type={showKeyVisible ? 'text' : 'password'}
                 value={geminiKey}
                 onChange={e => setGeminiKey(e.target.value)}
-                placeholder="AIzaSy..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
+                placeholder="Chave customizada (opcional)"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
               />
+              <span className="text-[10px] text-slate-500 block">Salvo no sessionStorage</span>
             </div>
-            <div>
-              <label className="block text-[10px] text-slate-400 mb-1">OpenAI API Key (para GPT-4o)</label>
+
+            {/* OpenAI Card */}
+            <div className={`p-3.5 rounded-xl border transition-all space-y-2 ${provider === 'openai' ? 'bg-slate-950 border-blue-500/50 shadow-md' : 'bg-slate-950/40 border-slate-800'}`}>
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-200 flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="providerRadio"
+                    value="openai"
+                    checked={provider === 'openai'}
+                    onChange={() => handleProviderChange('openai')}
+                    className="text-blue-500 focus:ring-blue-500"
+                  />
+                  <span>OpenAI Direct</span>
+                </label>
+                <span className="text-[10px] text-blue-400 font-mono bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/40">
+                  BYOK
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Informe sua chave OpenAI (sk-...) para usar GPT-4o, o3-mini ou o1:
+              </p>
               <input
                 type={showKeyVisible ? 'text' : 'password'}
                 value={openaiKey}
                 onChange={e => setOpenaiKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-indigo-500 focus:outline-none"
+                placeholder="sk-proj-..."
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
               />
+              <span className="text-[10px] text-slate-500 block">Salvo no sessionStorage</span>
             </div>
-            <div>
-              <label className="block text-[10px] text-slate-400 mb-1">Anthropic Key (para Claude)</label>
+
+            {/* Anthropic Claude Card */}
+            <div className={`p-3.5 rounded-xl border transition-all space-y-2 ${provider === 'anthropic' ? 'bg-slate-950 border-amber-500/50 shadow-md' : 'bg-slate-950/40 border-slate-800'}`}>
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-200 flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="providerRadio"
+                    value="anthropic"
+                    checked={provider === 'anthropic'}
+                    onChange={() => handleProviderChange('anthropic')}
+                    className="text-amber-500 focus:ring-amber-500"
+                  />
+                  <span>Anthropic Claude Direct</span>
+                </label>
+                <span className="text-[10px] text-amber-400 font-mono bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40">
+                  BYOK
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Informe sua chave Anthropic (sk-ant-...) para usar Claude 3.7 ou 3.5:
+              </p>
               <input
                 type={showKeyVisible ? 'text' : 'password'}
                 value={anthropicKey}
                 onChange={e => setAnthropicKey(e.target.value)}
                 placeholder="sk-ant-..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-amber-500 focus:outline-none"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-amber-500 focus:outline-none"
               />
+              <span className="text-[10px] text-slate-500 block">Salvo no sessionStorage</span>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* 2. Objetivo Geral */}
-      <div className="space-y-1.5">
+          </div>
+        )}
+      </div>
+
+      {/* 2. Objetivo Geral (Opcional em workflow_only) */}
+      <div className="space-y-2">
         <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-          {studioMode === 'workflow_only' && 'Propósito / Contexto dos Workflows'}
-          {studioMode === 'agent_only' && 'Papel & Objetivo Principal do Agente'}
-          {studioMode === 'both' && 'Objetivo e Papel do Agente'}
+          {studioMode === 'workflow_only' ? 'Propósito / Contexto dos Workflows (Opcional)' : 'Objetivo Geral e Papel do Agente'}
         </label>
         <input
           type="text"
@@ -690,439 +767,502 @@ Regras e Validações de Negócio:
               ? 'Ex: Integração REST para consulta de cadastro e emissão de fatura...'
               : 'Ex: Atendimento Inteligente para Consulta de Débitos e Emissão de 2ª Via de Fatura...'
           }
-          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-          required
+          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+          required={studioMode === 'both'}
         />
       </div>
 
       {/* 3. SEÇÃO DO AGENTE (Exibida em modo 'both' e 'agent_only') */}
       {studioMode !== 'workflow_only' && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center justify-between">
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <BrainCircuit className="w-4 h-4 text-indigo-400" />
-              <span>Instruções & Regras do Agente</span>
+              <BrainCircuit className="w-4 h-4 text-[#00D2FF]" />
+              <span>Orquestração do Agente (100% Automática pelos Workflows)</span>
             </label>
-
-            {/* Alternador de Modo: Texto Livre Único vs Passos & Regras Separados */}
-            <div className="flex items-center gap-2">
-              <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setInputMode('freeform')}
-                  className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    inputMode === 'freeform'
-                      ? 'bg-emerald-500 text-slate-950 shadow-xs font-bold'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Texto Livre (com IA)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode('structured')}
-                  className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    inputMode === 'structured'
-                      ? 'bg-emerald-500 text-slate-950 shadow-xs font-bold'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <ListOrdered className="w-3.5 h-3.5" />
-                  <span>Passos & Regras (Separados)</span>
-                </button>
-              </div>
-
-              <span className="hidden sm:inline-block text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-1 rounded-lg">
-                Padrão Oficial Fortics
-              </span>
-            </div>
+            <span className="text-[10px] font-mono text-[#00D2FF] bg-[#061833] border border-[#0066FF]/40 px-2.5 py-1 rounded-full">
+              Padrão Oficial Fortics
+            </span>
           </div>
 
-          {/* Renderização de acordo com o modo selecionado */}
-          {inputMode === 'freeform' ? (
-            /* Modo Texto Livre Único */
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-emerald-400" />
-                  <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                    Instruções Gerais do Atendimento (Texto Livre)
-                  </label>
-                </div>
-                <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded font-mono">
-                  Separação inteligente de Passos & Regras
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 leading-tight">
-                Escreva livremente como o bot deve atender. A IA identifica automaticamente o que são os <strong>Passos (o que fazer)</strong> e as <strong>Regras (como fazer)</strong>.
-              </p>
-              <textarea
-                rows={10}
-                value={freeformPrompt}
-                onChange={e => handleFreeformPromptChange(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 font-sans leading-relaxed focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                placeholder="Exemplo: Cumprimentar o cliente, solicitar CPF/CNPJ, consultar cadastro no sistema, listar contratos ativos e emitir segunda via se solicitado. Regras: validar CPF com 11 dígitos, pedir confirmação expressa antes de gravar e retornar #SUPORTE_HUMANO se o cliente pedir atendente..."
-                required={studioMode !== 'workflow_only'}
-              />
-              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                <span>Dica: Use palavras como "Passos" e "Regras" ou tópicos com hífen (-) para orientar o fluxo.</span>
-                <span>{freeformPrompt.length} caracteres</span>
-              </div>
-            </div>
-          ) : (
-            /* Modo Campos Separados Estruturados */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
-              {/* Passos do Agente */}
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ListOrdered className="w-4 h-4 text-emerald-400" />
-                    <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                      Passos do Agente (O que fazer)
-                    </label>
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-mono">instruction.steps</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-tight">
-                  Escreva cada ação em uma linha. O gerador compilará no padrão limpo sem números nem prefixos.
-                </p>
-                <textarea
-                  rows={8}
-                  value={naturalSteps}
-                  onChange={e => handleStructuredStepsChange(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="- Cumprimentar o cliente e identificar pelo nome&#10;- Pedir o CPF ou CNPJ do titular&#10;- Consultar o cadastro via integração&#10;- Confirmar os dados antes de prosseguir..."
-                  required={studioMode !== 'workflow_only'}
-                />
-              </div>
-
-              {/* Regras e Validações */}
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-amber-400" />
-                    <label className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                      Regras & Validações (Como fazer)
-                    </label>
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-mono">other_rules</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-tight">
-                  Regras de validação (CPF/CNPJ), confirmação expressa antes de gravar, tags de transbordo (#SUPORTE_HUMANO).
-                </p>
-                <textarea
-                  rows={8}
-                  value={naturalRules}
-                  onChange={e => handleStructuredRulesChange(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                  placeholder="- Validar CPF no padrão XXX.XXX.XXX-XX&#10;- Pedir confirmação expressa antes de gravar&#10;- Se solicitar atendente, retornar #SUPORTE_HUMANO..."
-                  required={studioMode !== 'workflow_only'}
-                />
-              </div>
-
-            </div>
-          )}
-
-          {/* Seção Exclusiva de Tools & Transbordo em Modo 'agent_only' */}
-          {studioMode === 'agent_only' && (
-            <div className="bg-slate-900/70 border border-indigo-500/30 rounded-2xl p-4 space-y-4">
+          <div className="bg-[#061833]/90 border border-[#0066FF]/40 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#0066FF]/20 pb-2.5">
               <div className="flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
-                  Ferramentas (Tools) & Tags de Transbordo
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
-                    <span>Tools/Workflows que o Agente pode chamar</span>
-                    <span className="text-[10px] text-slate-500 font-mono">agent.tools</span>
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={agentToolsInput}
-                    onChange={e => setAgentToolsInput(e.target.value)}
-                    placeholder="consultar_cadastro(cpf): Consulta dados cadastrais&#10;emitir_segunda_via(id_contrato): Gera 2ª via da fatura"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-indigo-200 font-mono leading-relaxed focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-400">
-                    A IA gerará as definições de schema de tools e as orientações no prompt para quando o bot deve chamá-las.
+                <div className="p-1.5 rounded-lg bg-[#020b18] text-[#00D2FF] border border-[#0066FF]/30">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Dedução Automática do Agente (API-First)
+                  </h4>
+                  <p className="text-[11px] text-slate-300">
+                    O Studio deduz e constrói as instruções do robô (<code className="text-[#00D2FF]">instruction.steps</code>) diretamente a partir das integrações cURL configuradas abaixo.
                   </p>
                 </div>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-1 rounded-full hidden sm:inline-block">
+                {curlList.length} {curlList.length === 1 ? 'Integração' : 'Integrações'}
+              </span>
+            </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
-                    <span>Tag de Transbordo para Atendente Humano</span>
-                    <span className="text-[10px] text-slate-500 font-mono">tag de transbordo</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={agentTransferTag}
-                    onChange={e => setAgentTransferTag(e.target.value)}
-                    placeholder="#SUPORTE_HUMANO"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-400">
-                    Tag enviada pelo Agente quando o cliente pede suporte humano ou quando os dados não puderem ser resolvidos.
-                  </p>
+            {/* Preview em Tempo Real da Esteira de Diálogo */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <ListOrdered className="w-3.5 h-3.5 text-[#00D2FF]" />
+                <span>Fluxo de passos que o Agente executará no chat:</span>
+              </label>
+              <div className="p-3 bg-[#020b18] border border-[#0066FF]/30 rounded-xl space-y-1.5 text-xs text-slate-200 font-mono">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-[#0066FF] flex items-center justify-center text-[10px] font-black text-white shrink-0">1</span>
+                  <span>Cumprimentar o cliente e solicitar documento/parâmetro inicial</span>
+                </div>
+
+                {curlList.map((c, idx) => {
+                  const cleanName = (c.name || `Integração ${idx + 1}`).replace(/^[0-9.\-_ ]+/, '').trim();
+                  return (
+                    <div key={c.id || idx} className="flex items-center gap-2 text-cyan-200">
+                      <span className="w-5 h-5 rounded-full bg-[#0066FF]/70 flex items-center justify-center text-[10px] font-bold text-white shrink-0">{idx + 2}</span>
+                      <span>
+                        {idx === 0
+                          ? <>Executar a <strong>{cleanName.toLowerCase()}</strong> com o documento informado</>
+                          : <>Com o identificador retornado na etapa anterior, executar a <strong>{cleanName.toLowerCase()}</strong></>
+                        }
+                      </span>
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-black text-white shrink-0">{curlList.length + 2}</span>
+                  <span>Confirmar os dados e entregar o resultado estruturado ao cliente</span>
                 </div>
               </div>
             </div>
-          )}
+
+            {/* Campo Opcional para Regras Adicionais */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Regras Extras de Negócio & Transbordo (Opcional)
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">other_rules</span>
+              </label>
+              <textarea
+                rows={3}
+                value={naturalRules}
+                onChange={e => handleStructuredRulesChange(e.target.value)}
+                placeholder="Ex: - Aceitar CPF com 11 dígitos com ou sem pontuação (XXX.XXX.XXX-XX ou apenas números)&#10;- Não inventar informações além do retornado pela ferramenta..."
+                className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-sans leading-relaxed focus:border-amber-500 focus:outline-none"
+              />
+            </div>
+          </div>
         </div>
       )}
 
-      {/* 4. WORKFLOWS & INTEGRAÇÕES DE API (cURL por cURL) (Exibido em modo 'both' e 'workflow_only') */}
-      {studioMode !== 'agent_only' && (
-        <div className="space-y-4 pt-2">
-          
-          {/* Header da Seção de cURLs */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
-                <Workflow className="w-4.5 h-4.5" />
-                <span>Workflows & Integrações de API (cURL por cURL)</span>
-              </h3>
-              <p className="text-xs text-slate-400">
-                Cadastre cada integração individualmente: informe o cURL, o modelo de resposta JSON e o que precisa ser extraído.
-              </p>
+      {/* 4. SEÇÃO DE WORKFLOWS & cURLs */}
+      <div className="space-y-4 pt-2">
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Code2 className="w-4 h-4 text-[#00D2FF]" />
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-200">
+              Integrações de API / Comandos cURL
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Architecture Switcher */}
+            <div className="flex items-center bg-[#061325] p-1 rounded-full border border-[#0066FF]/30 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setWorkflowArchitectureMode('single_consolidated')}
+                className={`px-4 py-1.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1.5 ${workflowArchitectureMode === 'single_consolidated'
+                  ? 'bg-[#0066FF] text-white shadow-md shadow-[#0066FF]/40'
+                  : 'text-slate-300 hover:text-white'
+                  }`}
+                title="Executa Autenticação, Consultas e Ações em sequência contínua no mesmo workflow.json"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>1 Workflow com Várias Integrações (Em Cadeia)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWorkflowArchitectureMode('multiple_modular')}
+                className={`px-4 py-1.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1.5 ${workflowArchitectureMode === 'multiple_modular'
+                  ? 'bg-[#0066FF] text-white shadow-md shadow-[#0066FF]/40'
+                  : 'text-slate-300 hover:text-white'
+                  }`}
+                title="Gera 1 arquivo workflow.json isolado para cada função/ferramenta do robô"
+              >
+                <Workflow className="w-3.5 h-3.5" />
+                <span>Workflows Separados (1 para Cada Função)</span>
+              </button>
             </div>
+
+            {/* Botão Tira-Dúvidas com Exemplos */}
+            <button
+              type="button"
+              onClick={() => setShowArchitectureGuide(!showArchitectureGuide)}
+              className={`px-3.5 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${showArchitectureGuide
+                ? 'bg-[#0066FF] text-white border-[#00D2FF]'
+                : 'bg-[#020b18] hover:bg-[#0066FF]/20 text-[#00D2FF] border-[#0066FF]/40'
+                }`}
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Tira-Dúvidas: Qual Escolher?</span>
+            </button>
 
             <button
               type="button"
               onClick={handleAddCurlItem}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+              className="px-4 py-1.5 rounded-full bg-[#020b18] hover:bg-[#0066FF]/20 text-white border border-[#0066FF]/40 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
             >
-              <Plus className="w-4 h-4" />
-              <span>Adicionar cURL</span>
+              <Plus className="w-3.5 h-3.5 text-[#00D2FF]" />
+              <span>
+                {workflowArchitectureMode === 'single_consolidated'
+                  ? 'Adicionar Próxima Etapa da Cadeia'
+                  : 'Adicionar Outro Workflow Separado'}
+              </span>
             </button>
           </div>
-
-          {/* Informative cURL-First Banner */}
-          <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-cyan-950/30 border border-cyan-900/50 text-xs text-cyan-200">
-            <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-            <p className="leading-relaxed text-[11px]">
-              <strong>Mapeamento Direto para Workflows Fortics:</strong> Cada item abaixo gerará um Workflow Fortics completo com nó <code className="text-cyan-300 font-mono">instructions</code>, nó Code <code className="text-indigo-300 font-mono">request</code>, nó <code className="text-cyan-300 font-mono">REST</code> com headers/token e nó Code <code className="text-emerald-300 font-mono">tratar_dados</code> com as extrações e filtros especificados.
-            </p>
-          </div>
-
-          {/* Lista de Cards cURL */}
-          <div className="space-y-4">
-            {curlList.map((item, idx) => (
-              <div
-                key={item.id}
-                className="bg-slate-900/70 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-4 sm:p-5 space-y-3.5 transition-all shadow-sm"
-              >
-                {/* Header do Card cURL */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
-                  <div className="flex items-center gap-2 flex-1 min-w-[220px]">
-                    <span className="text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2.5 py-1 rounded-md">
-                      cURL #{idx + 1}
-                    </span>
-                    <input
-                      type="text"
-                      value={item.name}
-                      onChange={e => handleUpdateCurlItem(item.id, 'name', e.target.value)}
-                      placeholder="Nome da Chamada (ex: Buscar Cliente por CPF)"
-                      className="bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg text-xs font-bold text-slate-100 focus:outline-none px-2.5 py-1 flex-1 min-w-[160px]"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleDuplicateCurlItem(item)}
-                      title="Duplicar este cURL"
-                      className="px-2.5 py-1 text-slate-400 hover:text-cyan-300 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Duplicar</span>
-                    </button>
-                    {curlList.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCurlItem(item.id)}
-                        title="Remover este cURL"
-                        className="px-2.5 py-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950/50 border border-rose-900/50 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Remover</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Campo 1: Comando cURL */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Code2 className="w-3.5 h-3.5" />
-                    Comando cURL da API
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={item.curl}
-                    onChange={e => handleUpdateCurlItem(item.id, 'curl', e.target.value)}
-                    placeholder="curl --location 'https://api.empresa.com.br/v1/clientes?cpf=07395837355' \&#10;--header 'Authorization: Bearer seu_token_aqui'"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-cyan-200 font-mono leading-relaxed focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
-                    required={studioMode !== 'agent_only'}
-                  />
-                </div>
-
-                {/* Grid: Modelo de Resposta JSON + Regras de Filtro */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-                  
-                  {/* Modelo de Resposta */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5" />
-                      Modelo de Resposta da API (JSON de Exemplo)
-                    </label>
-                    <textarea
-                      rows={6}
-                      value={item.responseSample || ''}
-                      onChange={e => handleUpdateCurlItem(item.id, 'responseSample', e.target.value)}
-                      placeholder={`{\n  "result": {\n    "items": [\n      {\n        "id": 1,\n        "crm": 7308,\n        "nin": "07674944905",\n        "name": "Bruno Diniz - CLINIC",\n        "specialist": "Físico médico"\n      }\n    ]\n  }\n}`}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-emerald-200 font-mono leading-relaxed focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Regras de Filtro / Extração */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      O que precisa extrair / Filtros / Regras
-                    </label>
-                    <textarea
-                      rows={6}
-                      value={item.filterRules || ''}
-                      onChange={e => handleUpdateCurlItem(item.id, 'filterRules', e.target.value)}
-                      placeholder="Exemplo:&#10;- Extrair o ID do cliente, nome e especialidade para confirmar no chat antes da próxima chamada&#10;- Filtrar apenas contratos com status ATIVO&#10;- Descartar campos internos irrelevantes para o bot"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-
-                </div>
-
-              </div>
-            ))}
-          </div>
-
-          {/* Botão de Adicionar cURL no final da lista */}
-          <button
-            type="button"
-            onClick={handleAddCurlItem}
-            className="w-full py-3 rounded-2xl border border-dashed border-cyan-800 hover:border-cyan-400 hover:bg-cyan-950/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Adicionar outro cURL / Endpoint</span>
-          </button>
-
         </div>
-      )}
 
-      {/* 5. Arquitetura de Workflows Fortics */}
-      {studioMode !== 'agent_only' && (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
-                Arquitetura de Exportação dos Workflows
+        {/* Card Tira-Dúvidas com Exemplos Práticos */}
+        {showArchitectureGuide && (
+          <div className="bg-[#061833]/95 border border-[#0066FF]/40 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-[#0066FF]/25 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-[#020b18] text-[#00D2FF] border border-[#0066FF]/40">
+                  <HelpCircle className="w-4 h-4" />
+                </div>
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Guia Prático: Escolha a Estrutura Ideal para o seu Atendimento
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowArchitectureGuide(false)}
+                className="text-slate-400 hover:text-white text-xs cursor-pointer px-2 py-0.5"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {/* Opção 1: 1 Workflow com Várias Integrações */}
+              <div className="p-3.5 rounded-xl bg-[#020b18]/80 border border-[#0066FF]/30 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#00D2FF]">
+                  <Layers className="w-4 h-4" />
+                  <span>1 Workflow com Várias Integrações (Em Cadeia)</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <strong>Quando usar:</strong> Quando uma operação do sistema precisa de várias chamadas técnicas automáticas no backend, uma dependendo do resultado da outra, sem precisar perguntar nada ao cliente no meio do caminho.
+                </p>
+                <div className="p-2.5 bg-[#061325] rounded-lg border border-[#0066FF]/20 text-[11px] font-mono text-slate-300 space-y-1">
+                  <div className="text-emerald-400 font-bold">💡 Exemplo Prático:</div>
+                  <div>1º REST: Faz Login / Obtém Token OAuth</div>
+                  <div>2º Code: Trata e salva _vars.token.token</div>
+                  <div>3º REST: Consulta Débitos usando o Token</div>
+                  <div>4º Code: Filtra a fatura mais vencida</div>
+                  <div>5º Route Return: Devolve o JSON pronto pro Agente</div>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  ✓ <strong>Vantagem:</strong> O robô executa toda a esteira em 1 único segundo com zero atrito pro cliente.
+                </div>
+              </div>
+
+              {/* Opção 2: Workflows Separados */}
+              <div className="p-3.5 rounded-xl bg-[#020b18]/80 border border-[#0066FF]/30 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#38bdf8]">
+                  <Workflow className="w-4 h-4" />
+                  <span>Workflows Separados (1 para Cada Função)</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <strong>Quando usar:</strong> Quando são ações independentes que o cliente pode escolher ou não durante o diálogo conforme a necessidade dele.
+                </p>
+                <div className="p-2.5 bg-[#061325] rounded-lg border border-[#0066FF]/20 text-[11px] font-mono text-slate-300 space-y-1">
+                  <div className="text-cyan-400 font-bold">💡 Exemplo Prático:</div>
+                  <div>• Workflow 1: <span className="text-white">consultar_cadastro.json</span> (se pedir dados)</div>
+                  <div>• Workflow 2: <span className="text-white">emitir_segunda_via.json</span> (se pedir fatura)</div>
+                  <div>• Workflow 3: <span className="text-white">agendar_visita.json</span> (se pedir técnico)</div>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  ✓ <strong>Vantagem:</strong> Cada operação é uma ferramenta isolada que o Agente só chama quando o usuário pedir.
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Banner de Resumo da Cadeia */}
+        {workflowArchitectureMode === 'single_consolidated' && curlList.length > 1 && (
+          <div className="p-3.5 bg-[#061833]/90 border border-[#0066FF]/30 rounded-2xl text-xs text-slate-200 flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-[#020b18] text-[#00D2FF] border border-[#0066FF]/40 shrink-0">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-white block">1 Workflow Consolidado ({curlList.length} Chamadas HTTP Encadeadas)</span>
+              <span className="text-[11px] text-slate-300">
+                O fluxo executará sequencialmente: {curlList.map((c, i) => `${i + 1}º ${c.nodeName || c.name || `Etapa ${i + 1}`}`).join(' ➔ ')} com nós de código intermediários tratando e repassando variáveis via <code className="text-[#00D2FF]">_vars</code> e <code className="text-[#00D2FF]">{"{{...}}"}</code>.
               </span>
             </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded">
-              {workflowArchitectureMode === 'multiple_modular' ? 'Múltiplos Workflows (.json)' : 'Workflow Único'}
-            </span>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => setWorkflowArchitectureMode('multiple_modular')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                workflowArchitectureMode === 'multiple_modular'
-                  ? 'bg-cyan-950/40 border-cyan-500/80 ring-1 ring-cyan-500/30 text-white'
-                  : 'bg-slate-950/50 border-slate-800 hover:bg-slate-900 text-slate-400'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
-                  <Workflow className="w-3.5 h-3.5" />
-                  <span>Workflows Modulares (Recomendado)</span>
-                </span>
-                {workflowArchitectureMode === 'multiple_modular' && (
-                  <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-                )}
-              </div>
-              <p className="text-[11px] text-slate-400 leading-tight">
-                Gera 1 workflow isolado para cada operação cadastrada acima, facilitando o download e importação direta.
-              </p>
-            </button>
+        <div className="space-y-4">
+          {curlList.map((item, idx) => {
+            const defaultNodeName = idx === 0 && (item.curl.toLowerCase().includes('auth') || item.curl.toLowerCase().includes('token') || item.curl.toLowerCase().includes('login'))
+              ? 'token'
+              : (item.nodeName || `etapa_${idx + 1}`);
 
-            <button
-              type="button"
-              onClick={() => setWorkflowArchitectureMode('single_consolidated')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                workflowArchitectureMode === 'single_consolidated'
-                  ? 'bg-emerald-950/40 border-emerald-500/80 ring-1 ring-emerald-500/30 text-white'
-                  : 'bg-slate-950/50 border-slate-800 hover:bg-slate-900 text-slate-400'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                  <FileCode2 className="w-3.5 h-3.5" />
-                  <span>Workflow Único Consolidado</span>
-                </span>
-                {workflowArchitectureMode === 'single_consolidated' && (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            return (
+              <React.Fragment key={item.id}>
+                <div
+                  className={`bg-[#061325]/90 border rounded-2xl p-4 sm:p-5 space-y-3.5 transition-all shadow-lg ${workflowArchitectureMode === 'single_consolidated'
+                    ? 'border-[#0066FF]/30 hover:border-[#0066FF]/60'
+                    : 'border-[#0066FF]/20 hover:border-emerald-500/40'
+                    }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#0066FF]/20 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-white shadow-md ${workflowArchitectureMode === 'single_consolidated'
+                        ? 'bg-[#0066FF] shadow-[#0066FF]/30'
+                        : 'bg-emerald-600 shadow-emerald-950/40'
+                        }`}>
+                        {idx + 1}
+                      </span>
+
+                      <div className="flex flex-col">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={e => handleUpdateCurlItem(item.id, 'name', e.target.value)}
+                          className="bg-transparent text-xs font-bold text-white focus:outline-none border-b border-transparent hover:border-slate-600 focus:border-[#00D2FF] px-1 py-0.5"
+                          placeholder={
+                            workflowArchitectureMode === 'single_consolidated'
+                              ? `Etapa ${idx + 1}: Nome da Chamada HTTP`
+                              : `Workflow ${idx + 1}: Nome da Ferramenta`
+                          }
+                        />
+                      </div>
+
+                      {workflowArchitectureMode === 'single_consolidated' ? (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#0066FF]/20 text-[#00D2FF] border border-[#0066FF]/30 hidden sm:inline-block">
+                          Cadeia Sequencial (mesmo JSON)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 hidden sm:inline-block">
+                          Workflow Independente (.json)
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Controls: Move Up, Move Down, Duplicate, Delete */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => handleMoveCurlUp(idx)}
+                        className={`p-1.5 rounded-lg border text-[11px] font-medium transition-colors cursor-pointer flex items-center ${idx === 0
+                          ? 'bg-[#020b18]/40 border-slate-800 text-slate-600 cursor-not-allowed'
+                          : 'bg-[#020b18] hover:bg-[#0066FF]/20 border-[#0066FF]/30 text-slate-200'
+                          }`}
+                        title="Mover para cima"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={idx === curlList.length - 1}
+                        onClick={() => handleMoveCurlDown(idx)}
+                        className={`p-1.5 rounded-lg border text-[11px] font-medium transition-colors cursor-pointer flex items-center ${idx === curlList.length - 1
+                          ? 'bg-[#020b18]/40 border-slate-800 text-slate-600 cursor-not-allowed'
+                          : 'bg-[#020b18] hover:bg-[#0066FF]/20 border-[#0066FF]/30 text-slate-200'
+                          }`}
+                        title="Mover para baixo"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateCurlItem(item)}
+                        className="px-2.5 py-1 rounded-lg bg-[#020b18] hover:bg-[#0066FF]/20 text-slate-200 border border-[#0066FF]/30 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                        title="Duplicar"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>Duplicar</span>
+                      </button>
+
+                      {curlList.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCurlItem(item.id)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1 border border-rose-800/40"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remover</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Step Node Identifier & Variable Binding */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-[#020b18]/60 p-3 rounded-xl border border-[#0066FF]/15">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <span>
+                          {workflowArchitectureMode === 'single_consolidated'
+                            ? 'Identificador do Nó REST nesta cadeia (name):'
+                            : 'Identificador do Nó REST no Workflow (name):'}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        value={item.nodeName || defaultNodeName}
+                        onChange={e => handleUpdateCurlItem(item.id, 'nodeName', e.target.value)}
+                        placeholder="Ex: token, consulta_cliente, emissao_boleto"
+                        className="w-full bg-[#061325] border border-[#0066FF]/30 rounded-lg px-2.5 py-1.5 text-xs text-[#00D2FF] font-mono focus:border-[#0066FF] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <span>
+                          {workflowArchitectureMode === 'single_consolidated'
+                            ? 'Variáveis Injetadas nas Próximas Etapas:'
+                            : 'Variáveis Retornadas para o Agente:'}
+                        </span>
+                      </label>
+                      <div className="text-xs font-mono text-emerald-400 bg-[#061325] border border-[#0066FF]/20 rounded-lg px-2.5 py-1.5 flex items-center justify-between">
+                        <span>{"{{"}{item.nodeName || defaultNodeName}.campo{"}}"}</span>
+                        <span className="text-[10px] text-slate-400 font-sans">ou _vars.{item.nodeName || defaultNodeName}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Campo 1: Comando cURL */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-[#00D2FF] uppercase tracking-wider flex items-center gap-1.5">
+                      <Code2 className="w-3.5 h-3.5" />
+                      Comando cURL {workflowArchitectureMode === 'single_consolidated' ? `da Etapa ${idx + 1}` : `do Workflow ${idx + 1}`}
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={item.curl}
+                      onChange={e => handleUpdateCurlItem(item.id, 'curl', e.target.value)}
+                      placeholder={
+                        workflowArchitectureMode === 'single_consolidated'
+                          ? `curl --location 'https://api.empresa.com.br/v1/${idx === 0 ? 'auth/token' : 'clientes?id={{' + (curlList[0]?.nodeName || 'token') + '.token}}'}' \\\n--header 'Content-Type: application/json'`
+                          : `curl --location 'https://api.empresa.com.br/v1/clientes?cpf={{request.cpf}}' \\\n--header 'Content-Type: application/json'`
+                      }
+                      className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-cyan-200 font-mono leading-relaxed focus:border-[#0066FF] focus:ring-1 focus:ring-[#0066FF] focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Grid: Modelo de Resposta JSON + Regras de Filtro */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+
+                    {/* Modelo de Resposta */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5" />
+                        Modelo de Resposta da API (JSON de Exemplo)
+                      </label>
+                      <textarea
+                        rows={5}
+                        value={item.responseSample || ''}
+                        onChange={e => handleUpdateCurlItem(item.id, 'responseSample', e.target.value)}
+                        placeholder={`{\n  "status": "success",\n  "dados": {\n    "id": 1001\n  }\n}`}
+                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-emerald-200 font-mono leading-relaxed focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Regras de Tratamento / Filtro */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Tratamento JS no Nó de Código / O que Extrair
+                      </label>
+                      <textarea
+                        rows={5}
+                        value={item.filterRules || ''}
+                        onChange={e => handleUpdateCurlItem(item.id, 'filterRules', e.target.value)}
+                        placeholder={
+                          workflowArchitectureMode === 'single_consolidated'
+                            ? `Ex: Extrair o token para usar no Header Authorization da próxima chamada da cadeia.`
+                            : `Ex: Filtrar faturas em aberto e retornar apenas protocolo, valor e código de barras pro Agente.`
+                        }
+                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-sans leading-relaxed focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* Flow Connector Arrow ONLY for single_consolidated mode */}
+                {workflowArchitectureMode === 'single_consolidated' && idx < curlList.length - 1 && (
+                  <div className="flex items-center justify-center gap-3 py-1">
+                    <div className="h-px bg-gradient-to-r from-transparent via-[#0066FF]/40 to-transparent flex-1"></div>
+                    <div className="px-4 py-1.5 rounded-full bg-[#061833] border border-[#0066FF]/40 text-[#00D2FF] text-[11px] font-mono flex items-center gap-2 shadow-md">
+                      <span>⬇ Passo {idx + 1} ➔ Nó de Código (Tratar) ➔ Injeta em Passo {idx + 2}</span>
+                    </div>
+                    <div className="h-px bg-gradient-to-r from-transparent via-[#0066FF]/40 to-transparent flex-1"></div>
+                  </div>
                 )}
-              </div>
-              <p className="text-[11px] text-slate-400 leading-tight">
-                Gera todas as chamadas em sequência em um único arquivo de workflow integrado.
-              </p>
-            </button>
-          </div>
+
+                {/* Clean Visual Separation for multiple_modular mode */}
+                {workflowArchitectureMode === 'multiple_modular' && idx < curlList.length - 1 && (
+                  <div className="flex items-center justify-center gap-3 py-1 opacity-40">
+                    <div className="h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent flex-1"></div>
+                    <span className="text-[10px] text-slate-500 font-mono">próximo workflow independente</span>
+                    <div className="h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent flex-1"></div>
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
-      )}
 
-      {/* 6. Botão de Ação Principal */}
-      <div className="pt-2">
-        <button
-          type="submit"
-          disabled={isGenerating}
-          className={`w-full py-4 px-6 rounded-2xl text-white font-black text-sm tracking-wide shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
-            studioMode === 'workflow_only'
-              ? 'bg-gradient-to-r from-cyan-600 via-teal-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 shadow-cyan-950/50'
-              : studioMode === 'agent_only'
-              ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 shadow-indigo-950/50'
-              : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 shadow-emerald-950/50'
-          }`}
-        >
-          {isGenerating ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>
-                {studioMode === 'workflow_only' && 'Gerando Workflows Fortics (.json)...'}
-                {studioMode === 'agent_only' && 'Gerando Agente Fortics (.json)...'}
-                {studioMode === 'both' && 'Gerando Agente e Workflows Fortics...'}
-              </span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5 text-emerald-200" />
-              <span>
-                {studioMode === 'workflow_only' && 'Gerar Workflows & Integrações (.json)'}
-                {studioMode === 'agent_only' && 'Gerar Agente Fortics (.json)'}
-                {studioMode === 'both' && 'Gerar Agente e Workflows Fortics'}
-              </span>
-            </>
-          )}
-        </button>
+        {/* Terminal Route Return Step Card */}
+
+
+      </div>
+
+      {/* Prominent Sticky Submit Bar */}
+      <div className="sticky bottom-4 z-40 pt-4 flex justify-center items-center">
+        <div className="bg-[#020b18]/95 backdrop-blur-xl border border-[#0066FF]/40 rounded-full p-2 sm:p-2.5 shadow-2xl shadow-[#0066FF]/30 flex items-center justify-center">
+          <button
+            type="submit"
+            disabled={isGenerating}
+            className={`w-full sm:w-auto px-10 py-3.5 rounded-full font-black text-xs tracking-wider uppercase transition-all shadow-xl flex items-center justify-center gap-2.5 cursor-pointer ${isGenerating
+              ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+              : 'fortics-btn-primary hover:scale-[1.03] active:scale-[0.98]'
+              }`}
+          >
+            {isGenerating ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Compilando com IA...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-[#00D2FF]" />
+                <span>{studioMode === 'workflow_only' ? 'Gerar Workflows' : 'Gerar Agente e Workflows'}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
     </form>
   );
 };
+

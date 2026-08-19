@@ -1,25 +1,53 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { 
-  ForticsAgent, 
-  ForticsWorkflow, 
-  GenerationRequest, 
-  GenerationResponse, 
-  ValidationReport 
+import {
+  ForticsAgent,
+  ForticsWorkflow,
+  GenerationRequest,
+  GenerationResponse,
+  ValidationReport
 } from './types/fortics';
-import { 
-  DEFAULT_AGENT_SCHEMA_TEMPLATE, 
-  DEFAULT_WORKFLOW_SCHEMA_TEMPLATE 
+import {
+  DEFAULT_AGENT_SCHEMA_TEMPLATE,
+  DEFAULT_WORKFLOW_SCHEMA_TEMPLATE,
+  TEMPLATES_LIBRARY
 } from './data/forticsStandards';
 import { validateForticsAgentAndWorkflow } from './utils/forticsValidator';
-import { Navbar } from './components/Navbar';
+import { Navbar, AppTabType } from './components/Navbar';
 import { StudioBuilder } from './components/StudioBuilder';
 import { JsonInspector } from './components/JsonInspector';
 import { FlowstreamConverter } from './components/FlowstreamConverter';
-import { CheckCircle2, AlertCircle, Sparkles, ChevronDown, Code2 } from 'lucide-react';
+import { TemplatesAndManuals } from './components/TemplatesAndManuals';
+import { CheckCircle2, AlertCircle, Sparkles, ChevronDown, Code2, ShieldCheck, Download, ArrowUpRight, Zap } from 'lucide-react';
 
 export default function App() {
-  const [appTab, setAppTab] = useState<'builder' | 'converter'>('builder');
+  const [appTab, setAppTab] = useState<AppTabType>('builder');
+
+  // Global Theme: 'dark' (Default) vs 'light' (Branco)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('fortics_studio_theme');
+    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  });
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('fortics_studio_theme', next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light-theme');
+      document.documentElement.classList.remove('dark-theme');
+      document.documentElement.style.colorScheme = 'light';
+    } else {
+      document.documentElement.classList.add('dark-theme');
+      document.documentElement.classList.remove('light-theme');
+      document.documentElement.style.colorScheme = 'dark';
+    }
+  }, [theme]);
 
   // Current loaded Agent and Workflows
   const [agent, setAgent] = useState<ForticsAgent>(DEFAULT_AGENT_SCHEMA_TEMPLATE);
@@ -34,7 +62,7 @@ export default function App() {
   );
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [lastStudioMode, setLastStudioMode] = useState<'both' | 'workflow_only' | 'agent_only'>('both');
+  const [lastStudioMode, setLastStudioMode] = useState<'both' | 'workflow_only'>('both');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Compute live validation
@@ -43,6 +71,23 @@ export default function App() {
   const showToast = (type: 'success' | 'error' | 'info', text: string) => {
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleSelectTemplate = (templateId: string) => {
+    const tpl = TEMPLATES_LIBRARY.find(t => t.id === templateId);
+    if (!tpl) return;
+
+    setAgent(tpl.sampleAgent as ForticsAgent);
+    setWorkflow(tpl.sampleWorkflow as ForticsWorkflow);
+    setWorkflows([tpl.sampleWorkflow as ForticsWorkflow]);
+    setHasGenerated(true);
+    setShowJsonSection(true);
+    setAppTab('builder');
+    showToast('success', `Template "${tpl.title}" carregado com sucesso!`);
+
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
   };
 
   const handleGenerate = async (req: GenerationRequest) => {
@@ -59,19 +104,20 @@ export default function App() {
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Erro ao gerar schemas Fortics.');
+        throw new Error(err.details || err.error || 'Erro ao gerar especificações Fortics');
       }
 
       const data: GenerationResponse = await res.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Falha na resposta do motor de IA.');
+
+      if (data.agent) {
+        setAgent(data.agent);
       }
 
-      setAgent(data.agent);
-      setWorkflow(data.workflow);
       if (data.workflows && data.workflows.length > 0) {
         setWorkflows(data.workflows);
-      } else {
+        setWorkflow(data.workflows[0]);
+      } else if (data.workflow) {
+        setWorkflow(data.workflow);
         setWorkflows([data.workflow]);
       }
 
@@ -82,22 +128,26 @@ export default function App() {
       setHasGenerated(true);
       setShowJsonSection(true);
 
-      // Celebrate with confetti!
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.6 }
-      });
+      // Trigger celebrate confetti
+      try {
+        confetti({
+          particleCount: 70,
+          spread: 60,
+          origin: { y: 0.8 },
+          colors: ['#0066FF', '#00D2FF', '#25D366', '#ffffff']
+        });
+      } catch (e) {
+        // Ignore in environments without canvas
+      }
 
-      const count = data.workflows?.length || 1;
-      showToast('success', `Agente e ${count} Workflow(s) gerados! Role abaixo para ver os JSONs.`);
+      showToast('success', data.summary || 'Agente e Workflows gerados com rigor técnico Fortics!');
 
-      // Smooth scroll to results
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 250);
+      }, 200);
+
     } catch (error: any) {
-      console.error('Generation error:', error);
+      console.error(error);
       showToast('error', error.message || 'Erro inesperado durante a geração.');
     } finally {
       setIsGenerating(false);
@@ -152,7 +202,7 @@ export default function App() {
     list.forEach((wf, idx) => {
       setTimeout(() => {
         handleDownloadWorkflow(wf);
-      }, idx * 400);
+      }, idx * 300);
     });
     showToast('success', `Iniciando download de ${list.length} workflow(s) individuais!`);
   };
@@ -161,7 +211,7 @@ export default function App() {
     handleDownloadAgent();
     setTimeout(() => {
       handleDownloadAllWorkflows();
-    }, 500);
+    }, 400);
   };
 
   const scrollToResults = () => {
@@ -172,65 +222,63 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
-      
+    <div className="min-h-screen bg-[#020b18] text-slate-100 flex flex-col selection:bg-[#0066FF] selection:text-white font-sans">
+
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-18 right-6 z-50 animate-bounce">
-          <div className={`px-4 py-3 rounded-2xl shadow-2xl border text-xs font-bold flex items-center gap-2 backdrop-blur-md ${
-            toastMessage.type === 'success'
-              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-800'
+        <div className="fixed top-20 right-6 z-50 animate-fadeIn">
+          <div className={`px-4 py-3 rounded-full shadow-2xl border text-xs font-bold flex items-center gap-2.5 backdrop-blur-xl ${toastMessage.type === 'success'
+              ? 'bg-[#061833]/95 text-[#00D2FF] border-[#0066FF]/60 shadow-[#0066FF]/30'
               : toastMessage.type === 'error'
-              ? 'bg-rose-950/90 text-rose-300 border-rose-800'
-              : 'bg-cyan-950/90 text-cyan-300 border-cyan-800'
-          }`}>
-            {toastMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-            {toastMessage.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400" />}
-            {toastMessage.type === 'info' && <Sparkles className="w-4 h-4 text-cyan-400" />}
+                ? 'bg-rose-950/95 text-rose-300 border-rose-700/80 shadow-rose-950/50'
+                : 'bg-[#020b18]/95 text-slate-200 border-[#0066FF]/40 shadow-[#0066FF]/20'
+            }`}>
+            {toastMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-[#00D2FF] shrink-0" />}
+            {toastMessage.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+            {toastMessage.type === 'info' && <Sparkles className="w-4 h-4 text-[#0066FF] shrink-0" />}
             <span>{toastMessage.text}</span>
           </div>
         </div>
       )}
 
       {/* Main Navigation Bar */}
-      <Navbar 
+      <Navbar
         activeTab={appTab}
         onSelectTab={setAppTab}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
-      {/* Unified Screen Flow */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 space-y-8">
-        
-        {appTab === 'converter' ? (
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-[1700px] w-full mx-auto px-4 sm:px-8 lg:px-12 py-6 space-y-8 animate-fadeIn">
+
+        {appTab === 'templates' ? (
+          /* Templates & Manuals Tab */
+          <section className="bg-[#061325]/70 border border-[#0066FF]/20 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
+            <TemplatesAndManuals
+              onSelectTemplate={handleSelectTemplate}
+            />
+          </section>
+        ) : appTab === 'converter' ? (
           /* Total.js / Flowstream Converter Tab */
-          <FlowstreamConverter 
-            onWorkflowsConverted={(newWfs) => {
-              if (newWfs.length > 0) {
-                setWorkflows(newWfs);
-                setWorkflow(newWfs[0]);
-                setShowJsonSection(true);
-              }
-            }}
-            onAgentAndWorkflowsGenerated={(newAgent, newWfs) => {
-              setAgent(newAgent);
-              if (newWfs.length > 0) {
-                setWorkflows(newWfs);
-                setWorkflow(newWfs[0]);
-              }
-              setHasGenerated(true);
-              setShowJsonSection(true);
-              setAppTab('builder');
-              setTimeout(() => {
-                resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-              }, 250);
-            }}
-            showToast={showToast}
-          />
+          <section className="bg-[#061325]/70 border border-[#0066FF]/20 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
+            <FlowstreamConverter
+              onGenerate={async (req) => {
+                await handleGenerate(req);
+                setAppTab('builder');
+                setTimeout(() => {
+                  resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }, 300);
+              }}
+              isGenerating={isGenerating}
+              showToast={showToast}
+            />
+          </section>
         ) : (
           /* Main Studio Builder Tab */
           <>
             {/* 1. Main Configuration Form Screen */}
-            <section className="bg-slate-900/50 border border-slate-800/90 rounded-3xl overflow-hidden shadow-xl">
+            <section className="bg-[#061325]/70 border border-[#0066FF]/20 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
               <StudioBuilder
                 onGenerate={handleGenerate}
                 isGenerating={isGenerating}
@@ -244,10 +292,10 @@ export default function App() {
               <div className="text-center py-2">
                 <button
                   onClick={scrollToResults}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 text-emerald-400 text-sm font-bold shadow-lg transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#061833] hover:bg-[#0066FF]/20 border border-[#0066FF]/50 text-[#00D2FF] text-sm font-bold shadow-xl transition-all cursor-pointer hover:scale-105"
                 >
                   <Code2 className="w-4 h-4" />
-                  <span>Ver JSONs Gerados e Validação Fortics</span>
+                  <span>Ver JSONs Gerados</span>
                   <ChevronDown className="w-4 h-4" />
                 </button>
               </div>
@@ -255,34 +303,46 @@ export default function App() {
 
             {/* 2. Results Section (Liberada Abaixo da Tela Principal após Gerar) */}
             {showJsonSection && (
-              <section 
+              <section
                 ref={resultsRef}
-                id="resultados-json" 
-                className="space-y-4 pt-4 border-t border-slate-800 animate-fadeIn"
+                id="resultados-json"
+                className="space-y-4 pt-6 border-t border-[#0066FF]/20 animate-fadeIn"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3 px-2">
                   <div>
-                    <h3 className="text-base font-bold text-white flex items-center gap-2">
-                      <Code2 className="w-5 h-5 text-emerald-400" />
-                      <span>JSONs Gerados</span>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2.5">
+                      <Code2 className="w-5 h-5 text-[#00D2FF]" />
+                      <span>{lastStudioMode === 'workflow_only' ? 'Workflows Oficiais Fortics' : 'Resultados e JSONs Oficiais Fortics'}</span>
                     </h3>
-                    <p className="text-xs text-slate-400">
-                      Arquivos prontos para importar diretamente no seu painel.
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      {lastStudioMode === 'workflow_only'
+                        ? 'Arquivos workflow.json no padrão oficial 2026 prontos para importação no Fortics Omnichannel.'
+                        : 'Arquivos no padrão oficial 2026 para importar diretamente no painel Fortics Omnichannel (Agentes e Workflows).'}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {lastStudioMode !== 'workflow_only' && (
+                      <button
+                        onClick={handleDownloadAgent}
+                        className="px-4 py-2 bg-[#061833] hover:bg-[#0066FF]/20 text-slate-200 border border-[#0066FF]/40 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#00D2FF]" />
+                        <span>Baixar agente.json</span>
+                      </button>
+                    )}
+
                     <button
-                      onClick={handleDownloadBoth}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      onClick={handleDownloadAllWorkflows}
+                      className="px-4 py-2 bg-[#061833] hover:bg-[#0066FF]/20 text-slate-200 border border-[#0066FF]/40 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Baixar Tudo</span>
+                      <Download className="w-3.5 h-3.5 text-[#00D2FF]" />
+                      <span>Baixar Workflows ({workflows.length})</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="bg-slate-900/50 border border-slate-800/90 rounded-3xl overflow-hidden shadow-2xl">
+                <div className="bg-[#061325]/70 border border-[#0066FF]/20 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
                   <JsonInspector
                     agent={agent}
                     workflow={workflow}
@@ -302,10 +362,13 @@ export default function App() {
 
       </main>
 
-      {/* Clean Footer */}
-      <footer className="bg-slate-950 border-t border-slate-900 py-5 px-4 text-center text-xs text-slate-500 mt-12">
-        <div className="max-w-5xl mx-auto flex items-center justify-center">
-          <span className="font-semibold text-slate-400">Fortics Studio</span>
+      {/* Minimal Footer */}
+      <footer className="bg-[#010710] border-t border-[#0066FF]/15 py-5 px-4 text-center text-xs text-slate-500 mt-12">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#0066FF]"></span>
+            <span className="font-bold text-slate-300">Fortics Studio</span>
+          </div>
         </div>
       </footer>
 

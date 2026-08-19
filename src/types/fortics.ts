@@ -192,7 +192,10 @@ export interface ConfiguredWorkflow {
   id: string;
   name: string;
   description?: string;
-  apiCalls: OrderedApiStep[];
+  curlItems?: CurlItem[];
+  sampleResponse?: string;
+  filterRules?: string;
+  apiCalls?: OrderedApiStep[];
 }
 
 export interface CurlItem {
@@ -201,6 +204,8 @@ export interface CurlItem {
   curl: string;
   responseSample?: string;
   filterRules?: string;
+  nodeName?: string; // e.g. "token", "busca_cadastro", "gravar_agendamento"
+  outputVarName?: string; // e.g. "token.token", "dados_cliente.id"
 }
 
 export interface EndpointIntegration {
@@ -237,20 +242,22 @@ export interface AuthRouteConfig {
   headerAppliedToSubsequentCalls: string; // e.g. "Authorization: Bearer {{auth_token}}"
 }
 
+export type LLMProvider = 'gemini' | 'openai' | 'anthropic';
+
 export interface GenerationRequest {
-  provider: 'gemini' | 'openai' | 'anthropic';
+  provider: LLMProvider;
   model: string;
   apiKey?: string;
   temperature?: number;
   mode: 'new' | 'refactor';
-  studioMode?: 'both' | 'workflow_only' | 'agent_only';
-  inputMode?: 'freeform' | 'structured';
+  studioMode?: 'both' | 'workflow_only';
+  inputMode?: 'freeform' | 'structured' | 'workflow_driven';
   freeformPrompt?: string;
   businessContext: string;
   naturalAlgorithm?: string;
   naturalSteps?: string;
   naturalRules?: string;
-  workflowArchitectureMode?: 'single_pipeline' | 'multiple_modular'; // New: single pipeline vs separate workflow per operation
+  workflowArchitectureMode?: 'single_pipeline' | 'multiple_modular' | 'single_consolidated';
   authRoute?: AuthRouteConfig;
   apiDocs?: string;
   responseModelSample?: string;

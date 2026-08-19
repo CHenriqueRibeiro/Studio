@@ -1,23 +1,333 @@
 @import "tailwindcss";
 
-@layer base {
-  html {
-    scroll-behavior: smooth;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  }
+:root {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --fortics-blue: #0066FF;
+  --fortics-blue-hover: #0052FF;
+  --fortics-cyan: #00D2FF;
+  --fortics-navy: #020B18;
+}
 
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+html {
+  scroll-behavior: smooth;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+html.light-theme {
+  color-scheme: light;
+}
+
+/* ============================================================
+   DARK THEME (PADRÃO ESCURO)
+   ============================================================ */
+body {
+  background-color: #020b18;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(0, 102, 255, 0.12) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(0, 210, 255, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(2, 11, 24, 0.98) 0%, #010710 100%);
+  background-attachment: fixed;
+  color: #f1f5f9;
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ============================================================
+   LIGHT THEME (TEMA CLARO / BRANCO OFICIAL)
+   ============================================================ */
+html.light-theme body {
+  background-color: #f1f5f9;
+  background-image: 
+    radial-gradient(circle at 10% 10%, rgba(0, 102, 255, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 90% 90%, rgba(0, 210, 255, 0.04) 0%, transparent 50%),
+    linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
+  background-attachment: fixed;
+  color: #0f172a;
+}
+
+/* 1. Containers, Headers e Cards */
+html.light-theme header {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-bottom-color: #e2e8f0 !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
+  color: #0f172a !important;
+}
+
+html.light-theme nav {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light-theme nav button:not(.bg-\[\#0066FF\]) {
+  color: #475569 !important;
+}
+
+html.light-theme nav button:not(.bg-\[\#0066FF\]):hover {
+  color: #0f172a !important;
+  background-color: #e2e8f0 !important;
+}
+
+html.light-theme section {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light-theme .bg-\[\#061325\],
+html.light-theme .bg-\[\#061325\]\/70,
+html.light-theme .bg-\[\#061325\]\/90,
+html.light-theme .bg-\[\#061833\],
+html.light-theme .bg-\[\#061833\]\/70,
+html.light-theme .bg-\[\#061833\]\/80,
+html.light-theme .bg-\[\#061833\]\/90,
+html.light-theme .bg-\[\#061833\]\/95 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light-theme .bg-\[\#020b18\],
+html.light-theme .bg-\[\#020b18\]\/60,
+html.light-theme .bg-\[\#020b18\]\/80,
+html.light-theme .bg-\[\#020b18\]\/90,
+html.light-theme .bg-\[\#040f24\],
+html.light-theme .bg-slate-900,
+html.light-theme .bg-slate-950,
+html.light-theme .bg-slate-900\/70,
+html.light-theme .bg-slate-950\/80 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* 2. Regras Estritas de Botões Primários e Gradientes (SEMPRE BRANCO) */
+html.light-theme button.bg-\[\#0066FF\],
+html.light-theme button.bg-\[\#0066FF\] *,
+html.light-theme button[type="submit"],
+html.light-theme button[type="submit"] *,
+html.light-theme .bg-gradient-to-r,
+html.light-theme .bg-gradient-to-r *,
+html.light-theme .bg-gradient-to-tr,
+html.light-theme .bg-gradient-to-tr *,
+html.light-theme .bg-linear-to-r,
+html.light-theme .bg-linear-to-r *,
+html.light-theme .bg-emerald-600,
+html.light-theme .bg-emerald-600 *,
+html.light-theme .bg-emerald-700,
+html.light-theme .bg-emerald-700 *,
+html.light-theme .fortics-btn-primary,
+html.light-theme .fortics-btn-primary *,
+html.light-theme span[class*="rounded-full"][class*="bg-\[\#0066FF\]"],
+html.light-theme span[class*="rounded-full"][class*="bg-emerald-600"] {
+  color: #ffffff !important;
+}
+
+/* 3. Textos e Títulos em Modo Claro */
+html.light-theme h1,
+html.light-theme h2,
+html.light-theme h3,
+html.light-theme h4,
+html.light-theme label,
+html.light-theme strong {
+  color: #0f172a;
+}
+
+html.light-theme .text-white:not(button.bg-\[\#0066FF\] *):not(button[type="submit"] *):not(.bg-linear-to-r *):not(.bg-gradient-to-r *):not(.bg-emerald-600 *):not(span[class*="bg-\[\#0066FF\]"] *):not(span[class*="bg-emerald-600"] *) {
+  color: #0f172a !important;
+}
+
+html.light-theme .text-slate-100,
+html.light-theme .text-slate-200,
+html.light-theme .text-slate-300 {
+  color: #334155 !important;
+}
+
+html.light-theme .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.light-theme .text-cyan-200,
+html.light-theme .text-cyan-300,
+html.light-theme .text-\[\#00D2FF\] {
+  color: #0284c7 !important;
+}
+
+html.light-theme .text-amber-200,
+html.light-theme .text-amber-300 {
+  color: #b45309 !important;
+}
+
+html.light-theme .text-emerald-300,
+html.light-theme .text-emerald-400 {
+  color: #047857 !important;
+}
+
+html.light-theme .text-rose-300,
+html.light-theme .text-rose-400 {
+  color: #be123c !important;
+}
+
+/* 4. Inputs, Textareas e Selects em Modo Claro */
+html.light-theme input:not([type="checkbox"]):not([type="radio"]),
+html.light-theme textarea,
+html.light-theme select {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light-theme input::placeholder,
+html.light-theme textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light-theme input:focus,
+html.light-theme textarea:focus,
+html.light-theme select:focus {
+  border-color: #0066FF !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.15) !important;
+  color: #0f172a !important;
+}
+
+/* 5. Badges e Caixas de Destaque em Modo Claro */
+html.light-theme .border-emerald-500\/30,
+html.light-theme .border-emerald-500\/40,
+html.light-theme .border-emerald-800,
+html.light-theme .bg-emerald-950,
+html.light-theme .bg-emerald-950\/20,
+html.light-theme .bg-emerald-950\/40 {
+  border-color: #bbf7d0 !important;
+  background-color: #f0fdf4 !important;
+  color: #166534 !important;
+}
+
+html.light-theme .border-rose-500\/30,
+html.light-theme .border-rose-500\/40,
+html.light-theme .border-rose-800,
+html.light-theme .bg-rose-950,
+html.light-theme .bg-rose-950\/20,
+html.light-theme .bg-rose-950\/40 {
+  border-color: #fecdd3 !important;
+  background-color: #fff1f2 !important;
+  color: #9f1239 !important;
+}
+
+html.light-theme .border-amber-500\/30,
+html.light-theme .border-amber-500\/40,
+html.light-theme .bg-amber-950,
+html.light-theme .bg-amber-950\/20 {
+  border-color: #fde68a !important;
+  background-color: #fffbeb !important;
+  color: #92400e !important;
+}
+
+html.light-theme .border-blue-500\/30,
+html.light-theme .border-blue-500\/40,
+html.light-theme .bg-blue-950,
+html.light-theme .bg-blue-950\/20 {
+  border-color: #bfdbfe !important;
+  background-color: #eff6ff !important;
+  color: #1e40af !important;
+}
+
+/* 6. Code & Pre Blocks em Modo Claro */
+html.light-theme pre,
+html.light-theme code {
+  color: #0369a1;
+}
+
+html.light-theme pre.text-slate-300,
+html.light-theme div.font-mono.text-slate-300,
+html.light-theme textarea.font-mono {
+  color: #0f172a !important;
+}
+
+/* Scrollbar em Modo Claro */
+html.light-theme ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html.light-theme ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html.light-theme ::-webkit-scrollbar-thumb:hover {
+  background: #0066FF;
+}
+
+/* Tipografia mono */
+code, pre, kbd, samp {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Sleek Scrollbars em Modo Escuro */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #020b18;
+}
+::-webkit-scrollbar-thumb {
+  background: #0d284f;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #0066FF;
+}
+
+/* Animations */
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
   }
-  ::-webkit-scrollbar-track {
-    background: #020617;
+  50% {
+    transform: translateY(-8px) rotate(2deg);
   }
-  ::-webkit-scrollbar-thumb {
-    background: #1e293b;
-    border-radius: 4px;
+}
+
+@keyframes floatReverse {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+  50% {
+    transform: translateY(8px) rotate(-2deg);
   }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 102, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(0, 102, 255, 0.6);
+  }
+}
+
+.animate-float {
+  animation: floatSlow 4s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: floatReverse 5s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
