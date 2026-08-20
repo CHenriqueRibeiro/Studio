@@ -492,7 +492,20 @@ ${activeFields.map(k => `            ${k}: primeiro.${k} !== undefined ? primeir
         itens: items.slice(0, ${limitCount})
     };
 } catch (e) {
-${activeFields.map(k => `            ${k}: data.${k}`).join(',\n')}
+    return { status: 'erro', message: 'Falha ao processar dados da API', details: e.message };
+}`;
+      } else {
+        const objAccessor = objectField ? `(raw && raw.${objectField}) ? raw.${objectField} : ` : '';
+        generatedScript = `// Script de tratamento gerado com base no Modelo de Resposta e Regras
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    let principal = ${objAccessor}(raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : (raw || {});
+
+    return {
+        status: 'sucesso',
+        dados: {
+${activeFields.map(k => `            ${k}: principal.${k} !== undefined ? principal.${k} : (raw && raw.${k} !== undefined ? raw.${k} : null)`).join(',\n')}
         }
     };
 } catch (e) {
