@@ -6,7 +6,8 @@ import {
   ConfiguredWorkflow,
   GenerationRequest,
   LLMProvider,
-  HeaderItem
+  HeaderItem,
+  AgentTarget
 } from '../types/fortics';
 import {
   Workflow,
@@ -92,6 +93,47 @@ export const FlowstreamConverter: React.FC<FlowstreamConverterProps> = ({
 }) => {
   // Mode: Both (Agente + Workflows) vs Workflow Only
   const [studioMode, setStudioMode] = useState<'both' | 'workflow_only'>('both');
+
+  // Squad Multi-Agente
+  const [agentsList, setAgentsList] = useState<AgentTarget[]>([
+    { id: 'agente_principal', name: 'Agente Geral', role: 'Atendimento e Suporte Geral', description: 'Atendimento geral com triagem e execução de rotas principais.' }
+  ]);
+
+  const handleAddAgent = () => {
+    const newId = `agente_${Date.now()}`;
+    const newIdx = agentsList.length + 1;
+    setAgentsList(prev => [
+      ...prev,
+      { id: newId, name: `Agente Especialista ${newIdx}`, role: 'Especialista', description: 'Atendimento especializado.' }
+    ]);
+  };
+
+  const handleUpdateAgent = (id: string, field: keyof AgentTarget, value: string) => {
+    setAgentsList(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+  };
+
+  const handleRemoveAgent = (id: string) => {
+    if (agentsList.length <= 1) {
+      showToast('error', 'Mantenha pelo menos 1 agente no Squad.');
+      return;
+    }
+    setAgentsList(prev => prev.filter(a => a.id !== id));
+    setRoutesList(prev => prev.map(r => ({
+      ...r,
+      assignedAgentIds: (r.assignedAgentIds || []).filter(aid => aid !== id)
+    })));
+  };
+
+  const handleToggleRouteAgent = (routeId: string, agentId: string) => {
+    setRoutesList(prev => prev.map(r => {
+      if (r.id !== routeId) return r;
+      const current = r.assignedAgentIds && r.assignedAgentIds.length > 0 ? r.assignedAgentIds : [agentsList[0]?.id || 'agente_principal'];
+      const updated = current.includes(agentId)
+        ? current.filter(id => id !== agentId)
+        : [...current, agentId];
+      return { ...r, assignedAgentIds: updated.length > 0 ? updated : [agentId] };
+    }));
+  };
 
   // Total.js FlowStream Raw JSON State
   const [rawJson, setRawJson] = useState<string>('');
@@ -934,6 +976,7 @@ ${mappingLines.join(',\n')}
       inputMode: 'workflow_driven',
       businessContext: streamName || 'Atendimento Inteligente integrado via Total.js FlowStream',
       freeformPrompt: '',
+      agentTargets: studioMode === 'both' ? agentsList : undefined,
       naturalSteps: effectiveSteps,
       naturalRules: naturalRules.trim(),
       provider,
@@ -1399,6 +1442,75 @@ ${mappingLines.join(',\n')}
           </div>
         )}
 
+        {/* SQUAD MULTI-AGENTE (Atribuição e Especialistas) */}
+        {studioMode === 'both' && (
+          <div className="bg-[#041226]/85 border border-[#0066FF]/35 rounded-3xl p-5 space-y-4 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#0066FF]/20 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#0052FF]/20 border border-[#00D2FF]/30 flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-[#00D2FF]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Squad Multi-Agente da Empresa</span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#0066FF]/30 text-[#00D2FF] text-[10px] font-mono font-bold">
+                      {agentsList.length} {agentsList.length === 1 ? 'Agente' : 'Agentes'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Cadastre os agentes especialistas e vincule quais rotas cada um terá permissão para executar.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddAgent}
+                className="px-3.5 py-1.5 bg-[#020b18] hover:bg-[#0066FF]/20 text-[#00D2FF] border border-[#0066FF]/40 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Adicionar Agente Especialista</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {agentsList.map((ag, agIdx) => (
+                <div key={ag.id} className="p-3 bg-[#020b18] border border-[#0066FF]/30 rounded-2xl space-y-2 relative">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold text-[#00D2FF] uppercase font-mono">
+                      Agente {agIdx + 1}
+                    </span>
+                    {agentsList.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAgent(ag.id)}
+                        className="text-slate-500 hover:text-rose-400 text-xs transition-colors cursor-pointer"
+                        title="Remover este agente do Squad"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={ag.name}
+                    onChange={e => handleUpdateAgent(ag.id, 'name', e.target.value)}
+                    placeholder="Nome do Agente (ex: Agente Financeiro)"
+                    className="w-full bg-[#061833] border border-[#0066FF]/25 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:border-[#00D2FF] focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={ag.role || ''}
+                    onChange={e => handleUpdateAgent(ag.id, 'role', e.target.value)}
+                    placeholder="Especialidade / Departamento (ex: Cobrança e Boletos)"
+                    className="w-full bg-[#061833] border border-[#0066FF]/25 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 focus:border-[#00D2FF] focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Cards de Rotas Extraídas */}
         <div className="space-y-6">
           {routesList.map((route, routeIdx) => {
@@ -1459,6 +1571,35 @@ ${mappingLines.join(',\n')}
                     </button>
                   </div>
                 </div>
+
+                {/* Atribuição de Agentes para esta Rota */}
+                {studioMode === 'both' && agentsList.length > 1 && (
+                  <div className="flex items-center gap-2 flex-wrap pt-0.5 pb-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">
+                      Vincular esta Rota aos Agentes:
+                    </span>
+                    {agentsList.map(ag => {
+                      const isAssigned = (route.assignedAgentIds && route.assignedAgentIds.length > 0)
+                        ? route.assignedAgentIds.includes(ag.id)
+                        : ag.id === agentsList[0]?.id;
+                      return (
+                        <button
+                          key={ag.id}
+                          type="button"
+                          onClick={() => handleToggleRouteAgent(route.id, ag.id)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border cursor-pointer flex items-center gap-1.5 ${
+                            isAssigned
+                              ? 'bg-linear-to-r from-[#0052FF]/30 to-[#00D2FF]/30 border-[#00D2FF] text-[#00D2FF] shadow-sm'
+                              : 'bg-[#020b18] border-slate-700/60 text-slate-500 hover:text-slate-300'
+                          }`}
+                        >
+                          {isAssigned ? <CheckCircle2 className="w-3 h-3 text-cyan-300" /> : <div className="w-3 h-3 rounded-full border border-slate-600" />}
+                          <span>{ag.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Sub-steps (curlItems) of this Route */}
                 <div className="space-y-3.5 pl-2">

@@ -58,6 +58,14 @@ export default function App() {
     return DEFAULT_AGENT_SCHEMA_TEMPLATE;
   });
 
+  const [agents, setAgents] = useState<ForticsAgent[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('fortics_current_agents');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [];
+  });
+
   const [workflow, setWorkflow] = useState<ForticsWorkflow>(() => {
     try {
       const saved = sessionStorage.getItem('fortics_current_workflow');
@@ -180,8 +188,12 @@ export default function App() {
         throw new Error(`Resposta inválida do servidor: ${jsonErr.message}`);
       }
 
-      if (data.agent) {
+      if (data.agents && data.agents.length > 0) {
+        setAgents(data.agents);
+        setAgent(data.agents[0]);
+      } else if (data.agent) {
         setAgent(data.agent);
+        setAgents([data.agent]);
       }
 
       if (data.workflows && data.workflows.length > 0) {
@@ -416,10 +428,12 @@ export default function App() {
                 <div className="bg-[#061325]/70 border border-[#0066FF]/20 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
                   <JsonInspector
                     agent={agent}
+                    agents={agents}
                     workflow={workflow}
                     workflows={workflows}
                     validationReport={validationReport}
                     onUpdateAgent={setAgent}
+                    onUpdateAgents={setAgents}
                     onUpdateWorkflow={setWorkflow}
                     onUpdateWorkflows={setWorkflows}
                     variableChainSummary={variableChainSummary}

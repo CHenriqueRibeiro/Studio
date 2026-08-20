@@ -32,6 +32,7 @@ export interface ForticsAgent {
   offset: string;
   instruction: ForticsAgentInstruction;
   other_rules: string;
+  tools?: any[];
 }
 
 export interface InstructionsNode {
@@ -188,6 +189,13 @@ export interface OrderedApiStep {
   purposeDescription?: string;
 }
 
+export interface AgentTarget {
+  id: string;
+  name: string;
+  role?: string;
+  description?: string;
+}
+
 export interface ConfiguredWorkflow {
   id: string;
   name: string;
@@ -195,6 +203,7 @@ export interface ConfiguredWorkflow {
   curlItems?: CurlItem[];
   sampleResponse?: string;
   filterRules?: string;
+  assignedAgentIds?: string[];
   apiCalls?: OrderedApiStep[];
 }
 
@@ -257,6 +266,7 @@ export interface GenerationRequest {
   inputMode?: 'freeform' | 'structured' | 'workflow_driven';
   freeformPrompt?: string;
   businessContext: string;
+  agentTargets?: AgentTarget[];
   naturalAlgorithm?: string;
   naturalSteps?: string;
   naturalRules?: string;
@@ -286,6 +296,7 @@ export interface GenerationRequest {
 export interface GenerationResponse {
   success: boolean;
   agent: ForticsAgent;
+  agents?: ForticsAgent[];
   workflow: ForticsWorkflow;
   workflows?: ForticsWorkflow[]; // Array of separate workflows (e.g. 1. Consultar Cliente, 2. Listar Itens, 3. Registrar)
   summary: string;

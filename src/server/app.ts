@@ -1636,12 +1636,91 @@ Gere o JSON consolidado estritamente com as chaves:
       parsed.workflow = mergedWf;
     }
 
+    // Squad Multi-Agente (se múltiplos agentes foram configurados)
+    const multiAgents: any[] = [];
+    if (req.body.agentTargets && Array.isArray(req.body.agentTargets) && req.body.agentTargets.length > 1) {
+      req.body.agentTargets.forEach((target: any, tIdx: number) => {
+        const assignedWfs = sanitizedWorkflows.filter((wf: any, wfIdx: number) => {
+          const origConfig = (req.body.configuredWorkflows || [])[wfIdx];
+          if (!origConfig || !origConfig.assignedAgentIds || origConfig.assignedAgentIds.length === 0) {
+            return true;
+          }
+          return origConfig.assignedAgentIds.includes(target.id);
+        });
+
+        const targetWfs = assignedWfs.length > 0 ? assignedWfs : sanitizedWorkflows;
+
+        const agentTools = targetWfs.map((wf: any) => {
+          const cleanToolName = (wf.name || 'workflow').toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '');
+          return {
+            id: crypto.randomUUID(),
+            name: cleanToolName || `tool_${wf.id.slice(0, 8)}`,
+            description: `Executa a integração de ${wf.name}`,
+            workflow_id: wf.id,
+            type: 'workflow',
+            enabled: true,
+            parameters: [
+              {
+                name: 'documento',
+                type: 'string',
+                description: 'Identificador, CPF ou parâmetro de busca',
+                required: true
+              }
+            ]
+          };
+        });
+
+        const agentSteps = targetWfs.map((wf: any) =>
+          `Com base na solicitação do cliente, acione o workflow de ${wf.name} passando os parâmetros informados.`
+        );
+
+        multiAgents.push({
+          id: crypto.randomUUID(),
+          name: target.name || `Agente ${tIdx + 1}`,
+          description: target.description || target.role || `Agente especializado em ${target.name}`,
+          audience: 'Clientes que solicitam atendimento especializado.',
+          greetings: `Olá! Sou o assistente de ${target.name}. Como posso ajudar?`,
+          style: `Você é o assistente virtual de ${target.name}. Seja cordial, rápido e execute os workflows de integração com precisão.`,
+          instruction: {
+            role: `Você é o assistente especialista em ${target.name}. Siga os seguintes passos:`,
+            steps: agentSteps.length > 0 ? agentSteps : [
+              'Cumprimentar o cliente e coletar os parâmetros necessários.',
+              'Executar a ferramenta adequada e retornar os dados estruturados.'
+            ]
+          },
+          other_rules: `# REGRAS DO AGENTE ${target.name.toUpperCase()}\n\n- Utilize exclusivamente as ferramentas do seu setor.\n- Não invente informações ausentes no retorno da API.\n- Entregue os dados com formatação limpa e amigável.`,
+          tools: agentTools,
+          enabled: true,
+          emojis: true,
+          force_greetings: false,
+          ocr_enabled: true,
+          protected: false,
+          webchat: false,
+          template: true,
+          voice_priority: false,
+          void_context: true,
+          media_upload_enabled: false,
+          offset: 'America/Sao_Paulo',
+          tts_id: '00000000-0000-0000-0000-000000000000',
+          llm_api_key: crypto.randomUUID(),
+          color: tIdx === 0 ? '#3dd56d' : tIdx === 1 ? '#00D2FF' : tIdx === 2 ? '#FF9900' : '#A855F7',
+          icon: `avatar-${(tIdx % 5) + 1}`,
+          cat: 'atendimento',
+          llm: 'GPT',
+          model: 'gpt-4o-mini',
+          max_tokens: 1000,
+          temperature: 0.2
+        });
+      });
+    }
+
     res.json({
       success: true,
       agent: parsed.agent,
+      agents: multiAgents.length > 0 ? multiAgents : undefined,
       workflow: parsed.workflow || sanitizedWorkflows[0],
       workflows: sanitizedWorkflows,
-      summary: parsed.summary || 'Agente e Workflows gerados com sucesso de acordo com as especificações Fortics.',
+      summary: parsed.summary || (multiAgents.length > 0 ? `Squad de ${multiAgents.length} Agentes e ${sanitizedWorkflows.length} Workflows gerados com sucesso!` : 'Agente e Workflows gerados com sucesso de acordo com as especificações Fortics.'),
       variableChainSummary: parsed.variableChainSummary || 'Cadeia de variáveis mapeada entre contexto, passos do agente e nós dos workflows.'
     });
   } catch (error: any) {

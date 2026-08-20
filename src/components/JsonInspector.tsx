@@ -33,10 +33,12 @@ import { validateForticsAgentAndWorkflow } from '../utils/forticsValidator';
 
 interface JsonInspectorProps {
   agent: ForticsAgent | null;
+  agents?: ForticsAgent[];
   workflow: ForticsWorkflow | null;
   workflows?: ForticsWorkflow[];
   validationReport: ValidationReport | null;
   onUpdateAgent: (agent: ForticsAgent) => void;
+  onUpdateAgents?: (agents: ForticsAgent[]) => void;
   onUpdateWorkflow: (workflow: ForticsWorkflow) => void;
   onUpdateWorkflows?: (workflows: ForticsWorkflow[]) => void;
   variableChainSummary?: string;
@@ -45,10 +47,12 @@ interface JsonInspectorProps {
 
 export const JsonInspector: React.FC<JsonInspectorProps> = ({
   agent,
+  agents = [],
   workflow,
   workflows = [],
   validationReport: initialValidation,
   onUpdateAgent,
+  onUpdateAgents,
   onUpdateWorkflow,
   onUpdateWorkflows,
   variableChainSummary,
@@ -58,12 +62,20 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
     studioMode === 'workflow_only' ? 'workflow' : 'agent'
   );
   const [selectedWfIndex, setSelectedWfIndex] = useState<number>(0);
+  const [selectedAgentIndex, setSelectedAgentIndex] = useState<number>(0);
 
   useEffect(() => {
     if (studioMode === 'workflow_only') {
       setActiveTab('workflow');
     }
   }, [studioMode]);
+
+  // Agents list (fallback to [agent] if none provided)
+  const currentAgentsList: ForticsAgent[] = (agents && agents.length > 0)
+    ? agents
+    : (agent ? [agent] : []);
+
+  const activeAgent = currentAgentsList[selectedAgentIndex] || agent;
   
   // Workflows list (fallback to [workflow] if none provided)
   const currentWorkflowsList: ForticsWorkflow[] = (workflows && workflows.length > 0) 
@@ -86,13 +98,14 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
   const [agentFreeformText, setAgentFreeformText] = useState<string>('');
 
   useEffect(() => {
-    if (agent) {
-      setAgentText(JSON.stringify(agent, null, 2));
-      const stepsFormatted = (agent.instruction?.steps || []).map(s => `- ${s}`).join('\n');
-      const rulesFormatted = agent.other_rules || '';
+    const curAgent = currentAgentsList[selectedAgentIndex] || agent;
+    if (curAgent) {
+      setAgentText(JSON.stringify(curAgent, null, 2));
+      const stepsFormatted = (curAgent.instruction?.steps || []).map(s => `- ${s}`).join('\n');
+      const rulesFormatted = curAgent.other_rules || '';
       setAgentFreeformText(`PASSOS DO ATENDIMENTO:\n${stepsFormatted}\n\nREGRAS E DIRETRIZES:\n${rulesFormatted}`);
     }
-  }, [agent]);
+  }, [agent, agents, selectedAgentIndex]);
 
   const handleAgentFreeformChange = (text: string) => {
     setAgentFreeformText(text);
@@ -252,6 +265,18 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
     });
   };
 
+  const handleDownloadAllAgents = () => {
+    currentAgentsList.forEach((ag, idx) => {
+      setTimeout(() => {
+        const safeName = (ag.name || `agente_${idx + 1}`)
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '_')
+          .replace(/_+/g, '_');
+        downloadJson(ag, `${safeName}.json`);
+      }, idx * 300);
+    });
+  };
+
   const formatCurrentJson = () => {
     try {
       if (activeTab === 'agent') {
@@ -280,7 +305,7 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
           </div>
           <div>
             <span className="text-xs sm:text-sm font-bold text-white block">JSONs Oficiais Prontos para o Fortics</span>
-            <span className="text-[11px] text-slate-300">Copie o JSON formatado diretamente ou baixe o arquivo .json</span>
+            <span className="text-[11px] text-slate-300">Copie o JSON formatado diretamente ou baixe os arquivos para importação</span>
           </div>
         </div>
 
@@ -295,17 +320,28 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
                 title="Copiar código JSON do Agente para colar direto no Fortics"
               >
                 {copiedTab === 'agente_bar' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-emerald-400" />}
-                <span>{copiedTab === 'agente_bar' ? 'Copiado!' : 'Copiar agente.json'}</span>
+                <span>{copiedTab === 'agente_bar' ? 'Copiado!' : currentAgentsList.length > 1 ? `Copiar ${currentAgentsList[selectedAgentIndex]?.name || 'Agente'}` : 'Copiar agente.json'}</span>
               </button>
               <button
                 type="button"
-                onClick={() => downloadJson(agentText, 'agente.json')}
+                onClick={() => downloadJson(agentText, `${(currentAgentsList[selectedAgentIndex]?.name || 'agente').toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`)}
                 className="py-1.5 px-3 rounded-full hover:bg-[#0066FF]/30 text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
-                title="Baixar arquivo agente.json"
+                title="Baixar arquivo JSON do Agente"
               >
                 <Download className="w-3.5 h-3.5 text-[#00D2FF]" />
                 <span className="hidden sm:inline">Baixar</span>
               </button>
+              {currentAgentsList.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleDownloadAllAgents}
+                  className="py-1.5 px-3 rounded-full bg-linear-to-r from-emerald-600/30 to-teal-500/30 hover:from-emerald-600/50 hover:to-teal-500/50 text-xs font-bold text-emerald-300 border border-emerald-500/40 flex items-center gap-1 transition-all cursor-pointer"
+                  title="Baixar todos os agentes do Squad em arquivos separados"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Baixar Squad ({currentAgentsList.length})</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -315,44 +351,51 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
               type="button"
               onClick={() => copyToClipboard(workflowText, 'workflow_bar')}
               className="py-1.5 px-3.5 rounded-full hover:bg-[#0066FF]/20 text-xs font-bold text-[#00D2FF] flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Copiar código JSON do Workflow para colar direto no Fortics"
+              title="Copiar código JSON do Workflow ativo"
             >
-              {copiedTab === 'workflow_bar' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-[#00D2FF]" />}
-              <span>{copiedTab === 'workflow_bar' ? 'Copiado!' : 'Copiar workflow.json'}</span>
+              {copiedTab === 'workflow_bar' ? <Check className="w-3.5 h-3.5 text-[#00D2FF]" /> : <Copy className="w-3.5 h-3.5 text-[#00D2FF]" />}
+              <span>{copiedTab === 'workflow_bar' ? 'Copiado!' : currentWorkflowsList.length > 1 ? `Copiar WF ${selectedWfIndex + 1}` : 'Copiar workflow.json'}</span>
             </button>
             <button
               type="button"
-              onClick={() => {
-                const safeName = (activeWorkflow?.name || 'workflow')
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]/g, '_')
-                  .replace(/_+/g, '_');
-                downloadJson(workflowText, `${safeName}.json`);
-              }}
+              onClick={() => downloadJson(workflowText, `${(activeWorkflow?.name || 'workflow').toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`)}
               className="py-1.5 px-3 rounded-full hover:bg-[#0066FF]/30 text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
-              title={currentWorkflowsList.length > 1 ? `Baixar ${activeWorkflow?.name || 'workflow'}.json` : 'Baixar workflow.json'}
+              title="Baixar arquivo workflow.json ativo"
             >
               <Download className="w-3.5 h-3.5 text-[#00D2FF]" />
               <span className="hidden sm:inline">Baixar</span>
             </button>
+            {currentWorkflowsList.length > 1 && (
+              <button
+                type="button"
+                onClick={handleDownloadAllWorkflows}
+                className="py-1.5 px-3 rounded-full bg-linear-to-r from-[#0052FF]/30 to-[#00D2FF]/30 hover:from-[#0052FF]/50 hover:to-[#00D2FF]/50 text-xs font-bold text-[#00D2FF] border border-[#00D2FF]/40 flex items-center gap-1 transition-all cursor-pointer"
+                title="Baixar todos os workflows em arquivos separados"
+              >
+                <Download className="w-3.5 h-3.5 text-[#00D2FF]" />
+                <span>Baixar Todos ({currentWorkflowsList.length})</span>
+              </button>
+            )}
           </div>
-
-          {/* Baixar Todos os Workflows */}
-          {currentWorkflowsList.length > 1 && (
-            <button
-              type="button"
-              onClick={handleDownloadAllWorkflows}
-              className="fortics-btn-primary py-2 px-4 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
-              title="Baixar todos os workflows separadamente (.json de cada um)"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Baixar Todos ({currentWorkflowsList.length})</span>
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Parse Error Notice */}
+      {/* Live Validation Alert Banner */}
+      {liveValidation && !liveValidation.isValid && (
+        <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs space-y-2">
+          <div className="flex items-center gap-2 font-bold text-amber-300">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Validações Técnicas Fortics Encontradas ({liveValidation.issues.length})</span>
+          </div>
+          <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-100/90 pl-1">
+            {liveValidation.issues.map((iss, i) => (
+              <li key={i}>{iss.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Parse Error Banner */}
       {parseError && (
         <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
           <XCircle className="w-4 h-4 flex-shrink-0" />
@@ -376,8 +419,8 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
                     : 'text-slate-300 hover:text-white'
                 }`}
               >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>agente.json</span>
+                <Bot className="w-3.5 h-3.5" />
+                <span>{currentAgentsList.length > 1 ? `Squad Agentes (${currentAgentsList.length})` : 'agente.json'}</span>
               </button>
             )}
 
@@ -390,7 +433,7 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
               }`}
             >
               <Code2 className="w-3.5 h-3.5" />
-              <span>workflow(s).json</span>
+              <span>{currentWorkflowsList.length > 1 ? `Workflows (${currentWorkflowsList.length})` : 'workflow.json'}</span>
             </button>
           </div>
 
@@ -416,6 +459,31 @@ export const JsonInspector: React.FC<JsonInspectorProps> = ({
           {activeTab === 'agent' && (
             <div className="space-y-4">
               
+              {/* Squad Multi-Agente Selector Tabs */}
+              {currentAgentsList.length > 1 && (
+                <div className="flex items-center gap-2 p-2 bg-[#020b18] border border-[#0066FF]/35 rounded-2xl overflow-x-auto">
+                  <div className="flex items-center gap-1.5 px-2 text-[#00D2FF] text-[11px] font-bold uppercase font-mono shrink-0">
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>Squad ({currentAgentsList.length}):</span>
+                  </div>
+                  {currentAgentsList.map((ag, idx) => (
+                    <button
+                      key={ag.id || idx}
+                      type="button"
+                      onClick={() => setSelectedAgentIndex(idx)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                        selectedAgentIndex === idx
+                          ? 'bg-linear-to-r from-[#0052FF] to-[#00D2FF] text-white shadow-md'
+                          : 'text-slate-400 hover:text-white hover:bg-[#061833]'
+                      }`}
+                    >
+                      <span>{idx + 1}. {ag.name || `Agente ${idx + 1}`}</span>
+                      <span className="text-[10px] opacity-75">({(ag.tools || []).length} tools)</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Header Switcher: Visual & Texto Livre vs JSON Bruto */}
               <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
                 <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
