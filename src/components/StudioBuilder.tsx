@@ -352,9 +352,44 @@ Regras e Validações de Negócio:
     setTimeout(() => setTreatmentToast(null), 3500);
   };
 
-  const handleGenerateJsTreatment = (itemId: string, sampleJson?: string, nodeName?: string) => {
+  // Helper to extract keys from sample JSON
+  const getDetectedKeysFromSample = (sampleJson?: string): { arrayField: string; keys: string[] } => {
+    if (!sampleJson || !sampleJson.trim()) return { arrayField: '', keys: [] };
+    try {
+      const parsed = JSON.parse(sampleJson.trim());
+      let arrayField = '';
+      let itemObj: any = parsed;
+
+      if (Array.isArray(parsed)) {
+        itemObj = parsed.length > 0 ? parsed[0] : {};
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        for (const k of Object.keys(parsed)) {
+          if (Array.isArray(parsed[k])) {
+            arrayField = k;
+            itemObj = parsed[k].length > 0 ? parsed[k][0] : {};
+            break;
+          } else if (parsed[k] && typeof parsed[k] === 'object') {
+            for (const sk of Object.keys(parsed[k])) {
+              if (Array.isArray(parsed[k][sk])) {
+                arrayField = `${k}.${sk}`;
+                itemObj = parsed[k][sk].length > 0 ? parsed[k][sk][0] : {};
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const keys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
+      return { arrayField, keys };
+    } catch {
+      return { arrayField: '', keys: [] };
+    }
+  };
+
+  const handleGenerateJsTreatment = (itemId: string, sampleJson?: string, nodeName?: string, userPrompt?: string) => {
     if (!sampleJson || !sampleJson.trim()) {
-      showTreatmentToast(itemId, '⚠️ Cole um exemplo de JSON de resposta ao lado antes de gerar o script.');
+      showTreatmentToast(itemId, '⚠️ Cole um exemplo de JSON de resposta antes de gerar o script.');
       return;
     }
 
@@ -391,30 +426,74 @@ Regras e Validações de Negócio:
         }
       }
 
-      const itemKeys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
+      const allKeys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
 
-      const idKey = itemKeys.find(k => /^(id|id_cliente|codigo|cod|protocolo|numero|id_contrato|uuid)/i.test(k)) || itemKeys[0] || 'id';
-      const nameKey = itemKeys.find(k => /^(nome|name|razao|descricao|titular|label)/i.test(k)) || itemKeys[1] || 'nome';
-      const docKey = itemKeys.find(k => /^(cpf|cnpj|cpfcnpj|documento|nin|doc|tax_id)/i.test(k));
-      const statusKey = itemKeys.find(k => /^(status|situacao|state|ativo|situacao_cadastral)/i.test(k));
-      const valueKey = itemKeys.find(k => /^(valor|preco|price|total|saldo|valor_aberto)/i.test(k));
-      const nestedListKey = itemKeys.find(k => Array.isArray(itemObj[k]));
+      if (allKeys.length === 0) {
+        showTreatmentToast(itemId, '⚠️ Nenhum campo detectado no JSON fornecido.');
+        return;
+      }
+
+      const promptLower = (userPrompt || '').toLowerCase();
+
+      // Analyze natural language instructions: detect removals and inclusions
+      const removedKeys: string[] = [];
+      const includedKeys: string[] = [];
+
+      allKeys.forEach(k => {
+        const kLower = k.toLowerCase();
+        // Negative patterns for this key
+        const removeRegex = new RegExp(`(?:remover|retirar|tirar|sem|descartar|excluir|não quero|nao quero)\\s+(?:o\\s+|a\\s+|os\\s+|as\\s+|campo\\s+)?${kLower}`, 'i');
+        if (removeRegex.test(promptLower)) {
+          removedKeys.push(k);
+        } else if (promptLower.includes(kLower)) {
+          includedKeys.push(k);
+        }
+      });
+
+      // Selected fields: if user specifically asked for certain fields, prioritize them. Otherwise all keys minus removed.
+      let activeFields: string[] = [];
+      if (includedKeys.length > 0) {
+        activeFields = includedKeys.filter(k => !removedKeys.includes(k));
+      } else {
+        activeFields = allKeys.filter(k => !removedKeys.includes(k));
+      }
+
+      // If user typed "só o nome" or "apenas X, Y", ensure only those
+      const onlyMatch = promptLower.match(/(?:só|apenas|somente)\s+([^,\.\n]+)/i);
+      if (onlyMatch) {
+        const onlyText = onlyMatch[1];
+        const matched = allKeys.filter(k => onlyText.includes(k.toLowerCase()));
+        if (matched.length > 0) {
+          activeFields = matched.filter(k => !removedKeys.includes(k));
+        }
+      }
+
+      if (activeFields.length === 0) {
+        activeFields = allKeys.slice(0, 5);
+      }
 
       const respVarName = nodeName ? `_vars.${nodeName.replace(/[^a-zA-Z0-9_]/g, '_')}` : '_vars.resposta_api';
 
+      // Check if user asked for filter by status/active
+      const filterActiveMatch = /(?:ativo|ativos|status ativo|somente ativo)/i.test(promptLower);
+      const limitMatch = promptLower.match(/(\d+)\s*(?:primeiros|registros|itens|contratos|faturas)/i);
+      const limitCount = limitMatch ? parseInt(limitMatch[1], 10) : 5;
+
       let generatedScript = '';
       if (arrayField) {
-        generatedScript = `// Script de tratamento e extração gerado para Fortics Omnichannel
+        generatedScript = `// Script de tratamento JavaScript gerado via IA a partir da instrução:
+// "${userPrompt || `Extrair ${activeFields.join(', ')} de ${arrayField}`}"
 try {
     let raw = ${respVarName} || _vars.resposta_api;
     if (typeof raw === 'string') raw = JSON.parse(raw);
 
-    // Descompactação automática da lista "${arrayField}"
+    // Descompactação automática da coleção "${arrayField}"
     let items = (raw && raw.${arrayField}) ? raw.${arrayField} :
                 (raw && raw.data) ? raw.data :
                 (raw && raw.result && raw.result.items) ? raw.result.items :
                 Array.isArray(raw) ? raw : [raw];
 
+${filterActiveMatch ? `    // Filtrar apenas registros com status ativo\n    items = items.filter(i => String(i.status || i.situacao || '').toUpperCase().includes('ATIVO'));\n` : ''}
     let total = items.length;
     let selecionado = total > 0 ? items[0] : null;
 
@@ -422,17 +501,21 @@ try {
         status: total > 0 ? 'sucesso' : 'vazio',
         total_encontrados: total,
         principal: selecionado ? {
-            ${idKey}: selecionado.${idKey},
-            ${nameKey}: selecionado.${nameKey},${docKey ? `\n            ${docKey}: selecionado.${docKey},` : ''}${statusKey ? `\n            ${statusKey}: selecionado.${statusKey},` : ''}${valueKey ? `\n            ${valueKey}: selecionado.${valueKey},` : ''}${nestedListKey ? `\n            ${nestedListKey}: (selecionado.${nestedListKey} || []).slice(0, 3)` : ''}
+${activeFields.map(k => {
+  const isSubArray = Array.isArray(itemObj[k]);
+  return isSubArray
+    ? `            ${k}: (selecionado.${k} || []).slice(0, 3)`
+    : `            ${k}: selecionado.${k}`;
+}).join(',\n')}
         } : null,
-        itens: items.slice(0, 5)
+        itens: items.slice(0, ${limitCount})
     };
 } catch (e) {
     return { status: 'erro', message: 'Falha ao processar dados da API', details: e.message };
 }`;
       } else {
-        const topFields = itemKeys.slice(0, 8);
-        generatedScript = `// Script de tratamento e extração gerado para Fortics Omnichannel
+        generatedScript = `// Script de tratamento JavaScript gerado via IA a partir da instrução:
+// "${userPrompt || `Extrair ${activeFields.join(', ')}`}"
 try {
     let raw = ${respVarName} || _vars.resposta_api;
     if (typeof raw === 'string') raw = JSON.parse(raw);
@@ -441,7 +524,7 @@ try {
     return {
         status: 'sucesso',
         dados: {
-            ${topFields.map(k => `${k}: data.${k}`).join(',\n            ')}
+${activeFields.map(k => `            ${k}: data.${k}`).join(',\n')}
         }
     };
 } catch (e) {
@@ -449,11 +532,48 @@ try {
 }`;
       }
 
-      handleUpdateCurlItem(itemId, 'filterRules', generatedScript);
-      showTreatmentToast(itemId, '✨ Script JavaScript de tratamento gerado com sucesso!');
+      // Update both natural explanation and JS code
+      const naturalSummary = userPrompt && userPrompt.trim()
+        ? userPrompt
+        : (arrayField
+          ? `Extrair ${activeFields.join(', ')} da lista de ${arrayField}.`
+          : `Extrair os campos ${activeFields.join(', ')}.`);
+
+      setCurlList(prev => prev.map(c => c.id === itemId ? {
+        ...c,
+        filterRules: naturalSummary,
+        generatedJsCode: generatedScript
+      } : c));
+
+      showTreatmentToast(itemId, '✨ Script JavaScript atualizado de acordo com a sua instrução!');
     } catch (err: any) {
       showTreatmentToast(itemId, `❌ Erro ao analisar: ${err.message}`);
     }
+  };
+
+  const handleToggleFieldInPrompt = (itemId: string, currentPrompt: string, fieldName: string, sampleJson?: string, nodeName?: string) => {
+    let newPrompt = '';
+    const lowerPrompt = (currentPrompt || '').toLowerCase();
+    const fieldLower = fieldName.toLowerCase();
+
+    if (lowerPrompt.includes(`remover ${fieldLower}`) || lowerPrompt.includes(`sem ${fieldLower}`)) {
+      // Switch back to include
+      newPrompt = currentPrompt
+        .replace(new RegExp(`(?:remover|retirar|tirar|sem|descartar)\\s+${fieldLower}`, 'gi'), '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!newPrompt.toLowerCase().includes(fieldLower)) {
+        newPrompt += ` Incluir ${fieldName}.`;
+      }
+    } else if (lowerPrompt.includes(fieldLower)) {
+      // Switch to remove
+      newPrompt = (currentPrompt ? currentPrompt + ' ' : '') + `Remover ${fieldName}.`;
+    } else {
+      // Add inclusion
+      newPrompt = (currentPrompt ? currentPrompt + ', ' : 'Extrair ') + `${fieldName}`;
+    }
+
+    handleGenerateJsTreatment(itemId, sampleJson, nodeName, newPrompt.trim());
   };
 
   const handleMoveCurlUp = (index: number) => {
@@ -1277,39 +1397,39 @@ try {
                     />
                   </div>
 
-                  {/* Grid: Modelo de Resposta JSON + Regras de Filtro */}
+                  {/* Grid: Modelo de Resposta JSON + Regras em Linguagem Natural */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
 
                     {/* Modelo de Resposta */}
                     <div className="space-y-1.5">
                       <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
                         <FileText className="w-3.5 h-3.5" />
-                        Modelo de Resposta da API (JSON de Exemplo)
+                        1. Modelo de Resposta da API (JSON de Exemplo)
                       </label>
                       <textarea
-                        rows={5}
+                        rows={7}
                         value={item.responseSample || ''}
                         onChange={e => handleUpdateCurlItem(item.id, 'responseSample', e.target.value)}
-                        placeholder={`{\n  "status": "success",\n  "dados": {\n    "id": 1001\n  }\n}`}
+                        placeholder={`{\n  "status": "success",\n  "clientes": [\n    {\n      "nome": "CARLOS SILVA",\n      "cpfcnpj": "12345678900",\n      "contratos": [{ "id": 101, "status": "ATIVO" }]\n    }\n  ]\n}`}
                         className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-emerald-200 font-mono leading-relaxed focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
 
-                    {/* Regras de Tratamento / Filtro */}
+                    {/* Regras em Linguagem Natural */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
                           <ShieldCheck className="w-3.5 h-3.5" />
-                          Tratamento JS no Nó de Código
+                          2. O que Extrair / Instrução (Linguagem Natural)
                         </label>
                         <button
                           type="button"
-                          onClick={() => handleGenerateJsTreatment(item.id, item.responseSample, item.name)}
+                          onClick={() => handleGenerateJsTreatment(item.id, item.responseSample, item.name, item.filterRules)}
                           className="px-2.5 py-0.5 rounded-md bg-linear-to-r from-amber-500/20 via-emerald-500/20 to-[#00D2FF]/20 hover:from-amber-500/30 hover:to-[#00D2FF]/30 border border-amber-400/40 hover:border-amber-300 text-amber-300 hover:text-amber-100 text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer transform active:scale-95"
-                          title="Extrair campos e gerar o script JavaScript automaticamente a partir do JSON de resposta"
+                          title="Atualizar o script JS com base na sua instrução em linguagem natural e no modelo de resposta"
                         >
                           <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
-                          <span>Extrair com IA (Gerar JS)</span>
+                          <span>Atualizar Script JS</span>
                         </button>
                       </div>
 
@@ -1320,18 +1440,77 @@ try {
                       )}
 
                       <textarea
-                        rows={5}
+                        rows={3}
                         value={item.filterRules || ''}
                         onChange={e => handleUpdateCurlItem(item.id, 'filterRules', e.target.value)}
-                        placeholder={
-                          workflowArchitectureMode === 'single_consolidated'
-                            ? `Ex: Extrair o token para usar no Header Authorization da próxima chamada da cadeia.`
-                            : `Ex: Filtrar faturas em aberto e retornar apenas protocolo, valor e código de barras pro Agente.`
-                        }
-                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:border-amber-500 focus:outline-none"
+                        placeholder={`Ex: Extrair nome, CPF e contratos ativos. Remover o campo tipo e endereço.`}
+                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-sans leading-relaxed focus:border-amber-500 focus:outline-none"
                       />
+
+                      {/* Detected Field Chips (Clickable to Add/Remove) */}
+                      {(() => {
+                        const detected = getDetectedKeysFromSample(item.responseSample);
+                        if (detected.keys.length === 0) return null;
+                        return (
+                          <div className="pt-1">
+                            <div className="text-[10px] text-slate-400 font-sans mb-1 flex items-center gap-1">
+                              <span>Campos detectados no JSON (clique para incluir/remover):</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+                              {detected.keys.map(k => {
+                                const isRemoved = (item.filterRules || '').toLowerCase().includes(`remover ${k.toLowerCase()}`) || (item.filterRules || '').toLowerCase().includes(`sem ${k.toLowerCase()}`);
+                                return (
+                                  <button
+                                    key={k}
+                                    type="button"
+                                    onClick={() => handleToggleFieldInPrompt(item.id, item.filterRules || '', k, item.responseSample, item.name)}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer border ${
+                                      isRemoved
+                                        ? 'bg-rose-950/40 border-rose-600/40 text-rose-300 line-through'
+                                        : 'bg-[#061e3d] border-[#0066FF]/40 text-cyan-300 hover:border-[#00D2FF] hover:bg-[#082a54]'
+                                    }`}
+                                    title={isRemoved ? `Clique para incluir ${k}` : `Clique para remover ${k}`}
+                                  >
+                                    {isRemoved ? `✕ ${k}` : `✓ ${k}`}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
+                  </div>
+
+                  {/* Bloco 3: Script JS Gerado e Editável no Nó de Código */}
+                  <div className="space-y-1.5 pt-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-[#00D2FF] uppercase tracking-wider flex items-center gap-1.5">
+                        <Code2 className="w-3.5 h-3.5" />
+                        3. Script JavaScript Gerado no Nó de Código (tratar_dados)
+                      </label>
+                      {item.generatedJsCode && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(item.generatedJsCode || '');
+                            showTreatmentToast(item.id, '📋 Script copiado para a área de transferência!');
+                          }}
+                          className="px-2 py-0.5 rounded bg-[#061833] hover:bg-[#0b2854] border border-[#0066FF]/30 text-slate-300 hover:text-white text-[10px] font-mono flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          <Copy className="w-3 h-3 text-[#00D2FF]" />
+                          <span>Copiar Código</span>
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      rows={6}
+                      value={item.generatedJsCode || ''}
+                      onChange={e => handleUpdateCurlItem(item.id, 'generatedJsCode', e.target.value)}
+                      placeholder={`// O script JavaScript do nó tratar_dados aparecerá aqui automaticamente.\n// Clique em "Atualizar Script JS" para gerar com base no JSON e na sua instrução em linguagem natural.`}
+                      className="w-full bg-[#010814] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:border-cyan-400 focus:outline-none"
+                    />
                   </div>
 
                 </div>

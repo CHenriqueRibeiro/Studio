@@ -203,7 +203,8 @@ export interface CurlItem {
   name: string;
   curl: string;
   responseSample?: string;
-  filterRules?: string;
+  filterRules?: string; // Instrução em linguagem natural do que extrair/filtrar
+  generatedJsCode?: string; // Código JavaScript de tratamento gerado
   nodeName?: string; // e.g. "token", "busca_cadastro", "gravar_agendamento"
   outputVarName?: string; // e.g. "token.token", "dados_cliente.id"
 }

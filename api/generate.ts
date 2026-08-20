@@ -845,9 +845,13 @@ Gere o JSON consolidado estritamente com as chaves:
                 __spec: true,
                 __spec_version: '1.0.0',
                 error_message: `Erro ao formatar os dados da etapa ${cIdx + 1}`,
-                value: cIdx === 0 && nodeName === 'token'
-                  ? `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    return {\n        token: (raw && (raw.access_token || raw.token || raw.jwt)) || 'TOKEN_EXTRAIDO',\n        status: 'autenticado'\n    };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
-                  : `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    let items = (raw && raw.result && raw.result.items) ? raw.result.items :\n                (raw && raw.data) ? raw.data : [raw];\n    return { status: 'sucesso', itens: items, total: items.length };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
+                value: (cItem.generatedJsCode && cItem.generatedJsCode.trim())
+                  ? cItem.generatedJsCode
+                  : (cItem.filterRules && cItem.filterRules.includes('try') && cItem.filterRules.includes('return'))
+                    ? cItem.filterRules
+                    : (cIdx === 0 && nodeName === 'token')
+                      ? `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    return {\n        token: (raw && (raw.access_token || raw.token || raw.jwt)) || 'TOKEN_EXTRAIDO',\n        status: 'autenticado'\n    };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
+                      : `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    let items = (raw && raw.result && raw.result.items) ? raw.result.items :\n                (raw && raw.data) ? raw.data : [raw];\n    return { status: 'sucesso', itens: items, total: items.length };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
               });
             });
 
@@ -951,9 +955,13 @@ Gere o JSON consolidado estritamente com as chaves:
             __spec: true,
             __spec_version: '1.0.0',
             error_message: `Erro ao processar dados da etapa ${idx + 1}`,
-            value: idx === 0 && nodeName === 'token'
-              ? `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    return {\n        token: (raw && (raw.access_token || raw.token || raw.jwt)) || 'TOKEN_EXTRAIDO',\n        status: 'autenticado'\n    };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
-              : `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    let items = (raw && raw.result && raw.result.items) ? raw.result.items :\n                (raw && raw.data) ? raw.data : [raw];\n    return { status: 'sucesso', itens: items, total: items.length };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
+            value: (item.generatedJsCode && item.generatedJsCode.trim())
+              ? item.generatedJsCode
+              : (item.filterRules && item.filterRules.includes('try') && item.filterRules.includes('return'))
+                ? item.filterRules
+                : (idx === 0 && nodeName === 'token')
+                  ? `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    return {\n        token: (raw && (raw.access_token || raw.token || raw.jwt)) || 'TOKEN_EXTRAIDO',\n        status: 'autenticado'\n    };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
+                  : `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    let items = (raw && raw.result && raw.result.items) ? raw.result.items :\n                (raw && raw.data) ? raw.data : [raw];\n    return { status: 'sucesso', itens: items, total: items.length };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
           });
         });
 
@@ -1064,7 +1072,11 @@ Gere o JSON consolidado estritamente com as chaves:
                 __spec: true,
                 __spec_version: '1.0.0',
                 error_message: 'Erro ao formatar os dados da API',
-                value: `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    let items = (raw && raw.result && raw.result.items) ? raw.result.items :\n                (raw && raw.data) ? raw.data : [raw];\n    return { status: 'sucesso', itens: items };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
+                value: (item.generatedJsCode && item.generatedJsCode.trim())
+                  ? item.generatedJsCode
+                  : (item.filterRules && item.filterRules.includes('try') && item.filterRules.includes('return'))
+                    ? item.filterRules
+                    : `try {\n    let raw = _vars.${nodeName};\n    if (typeof raw === 'string') raw = JSON.parse(raw);\n    let items = (raw && raw.result && raw.result.items) ? raw.result.items :\n                (raw && raw.data) ? raw.data : [raw];\n    return { status: 'sucesso', itens: items };\n} catch(e) {\n    return { status: 'erro', message: e.message };\n}`
               },
               {
                 id: returnId,
