@@ -345,6 +345,117 @@ Regras e Validações de Negócio:
     setCurlList(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
+  const [treatmentToast, setTreatmentToast] = useState<{ id: string; text: string } | null>(null);
+
+  const showTreatmentToast = (id: string, text: string) => {
+    setTreatmentToast({ id, text });
+    setTimeout(() => setTreatmentToast(null), 3500);
+  };
+
+  const handleGenerateJsTreatment = (itemId: string, sampleJson?: string, nodeName?: string) => {
+    if (!sampleJson || !sampleJson.trim()) {
+      showTreatmentToast(itemId, '⚠️ Cole um exemplo de JSON de resposta ao lado antes de gerar o script.');
+      return;
+    }
+
+    try {
+      let parsed: any;
+      try {
+        parsed = JSON.parse(sampleJson.trim());
+      } catch {
+        showTreatmentToast(itemId, '❌ O modelo de resposta não é um JSON válido. Verifique chaves e aspas.');
+        return;
+      }
+
+      let arrayField = '';
+      let itemObj: any = parsed;
+
+      if (Array.isArray(parsed)) {
+        itemObj = parsed.length > 0 ? parsed[0] : {};
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        const keys = Object.keys(parsed);
+        for (const k of keys) {
+          if (Array.isArray(parsed[k])) {
+            arrayField = k;
+            itemObj = parsed[k].length > 0 ? parsed[k][0] : {};
+            break;
+          } else if (parsed[k] && typeof parsed[k] === 'object') {
+            for (const sk of Object.keys(parsed[k])) {
+              if (Array.isArray(parsed[k][sk])) {
+                arrayField = `${k}.${sk}`;
+                itemObj = parsed[k][sk].length > 0 ? parsed[k][sk][0] : {};
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const itemKeys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
+
+      const idKey = itemKeys.find(k => /^(id|id_cliente|codigo|cod|protocolo|numero|id_contrato|uuid)/i.test(k)) || itemKeys[0] || 'id';
+      const nameKey = itemKeys.find(k => /^(nome|name|razao|descricao|titular|label)/i.test(k)) || itemKeys[1] || 'nome';
+      const docKey = itemKeys.find(k => /^(cpf|cnpj|cpfcnpj|documento|nin|doc|tax_id)/i.test(k));
+      const statusKey = itemKeys.find(k => /^(status|situacao|state|ativo|situacao_cadastral)/i.test(k));
+      const valueKey = itemKeys.find(k => /^(valor|preco|price|total|saldo|valor_aberto)/i.test(k));
+      const nestedListKey = itemKeys.find(k => Array.isArray(itemObj[k]));
+
+      const respVarName = nodeName ? `_vars.${nodeName.replace(/[^a-zA-Z0-9_]/g, '_')}` : '_vars.resposta_api';
+
+      let generatedScript = '';
+      if (arrayField) {
+        generatedScript = `// Script de tratamento e extração gerado para Fortics Omnichannel
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+
+    // Descompactação automática da lista "${arrayField}"
+    let items = (raw && raw.${arrayField}) ? raw.${arrayField} :
+                (raw && raw.data) ? raw.data :
+                (raw && raw.result && raw.result.items) ? raw.result.items :
+                Array.isArray(raw) ? raw : [raw];
+
+    let total = items.length;
+    let selecionado = total > 0 ? items[0] : null;
+
+    return {
+        status: total > 0 ? 'sucesso' : 'vazio',
+        total_encontrados: total,
+        principal: selecionado ? {
+            ${idKey}: selecionado.${idKey},
+            ${nameKey}: selecionado.${nameKey},${docKey ? `\n            ${docKey}: selecionado.${docKey},` : ''}${statusKey ? `\n            ${statusKey}: selecionado.${statusKey},` : ''}${valueKey ? `\n            ${valueKey}: selecionado.${valueKey},` : ''}${nestedListKey ? `\n            ${nestedListKey}: (selecionado.${nestedListKey} || []).slice(0, 3)` : ''}
+        } : null,
+        itens: items.slice(0, 5)
+    };
+} catch (e) {
+    return { status: 'erro', message: 'Falha ao processar dados da API', details: e.message };
+}`;
+      } else {
+        const topFields = itemKeys.slice(0, 8);
+        generatedScript = `// Script de tratamento e extração gerado para Fortics Omnichannel
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    let data = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : raw;
+
+    return {
+        status: 'sucesso',
+        dados: {
+            ${topFields.map(k => `${k}: data.${k}`).join(',\n            ')}
+        }
+    };
+} catch (e) {
+    return { status: 'erro', message: 'Falha ao processar dados da API', details: e.message };
+}`;
+      }
+
+      handleUpdateCurlItem(itemId, 'filterRules', generatedScript);
+      showTreatmentToast(itemId, '✨ Script JavaScript de tratamento gerado com sucesso!');
+    } catch (err: any) {
+      showTreatmentToast(itemId, `❌ Erro ao analisar: ${err.message}`);
+    }
+  };
+
   const handleMoveCurlUp = (index: number) => {
     if (index === 0) return;
     setCurlList(prev => {
@@ -1186,10 +1297,28 @@ Regras e Validações de Negócio:
 
                     {/* Regras de Tratamento / Filtro */}
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        Tratamento JS no Nó de Código / O que Extrair
-                      </label>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Tratamento JS no Nó de Código
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateJsTreatment(item.id, item.responseSample, item.name)}
+                          className="px-2.5 py-0.5 rounded-md bg-linear-to-r from-amber-500/20 via-emerald-500/20 to-[#00D2FF]/20 hover:from-amber-500/30 hover:to-[#00D2FF]/30 border border-amber-400/40 hover:border-amber-300 text-amber-300 hover:text-amber-100 text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer transform active:scale-95"
+                          title="Extrair campos e gerar o script JavaScript automaticamente a partir do JSON de resposta"
+                        >
+                          <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
+                          <span>Extrair com IA (Gerar JS)</span>
+                        </button>
+                      </div>
+
+                      {treatmentToast && treatmentToast.id === item.id && (
+                        <div className="px-2.5 py-1 rounded-lg bg-[#041a38] border border-[#00D2FF]/40 text-[#00D2FF] text-[11px] font-medium flex items-center gap-1.5 animate-fadeIn">
+                          <span>{treatmentToast.text}</span>
+                        </div>
+                      )}
+
                       <textarea
                         rows={5}
                         value={item.filterRules || ''}
@@ -1199,7 +1328,7 @@ Regras e Validações de Negócio:
                             ? `Ex: Extrair o token para usar no Header Authorization da próxima chamada da cadeia.`
                             : `Ex: Filtrar faturas em aberto e retornar apenas protocolo, valor e código de barras pro Agente.`
                         }
-                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-sans leading-relaxed focus:border-amber-500 focus:outline-none"
+                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:border-amber-500 focus:outline-none"
                       />
                     </div>
 

@@ -576,6 +576,90 @@ export const FlowstreamConverter: React.FC<FlowstreamConverterProps> = ({
     }));
   };
 
+  const handleGenerateStepJsTreatment = (routeId: string, stepId: string, sampleJson?: string, nodeName?: string) => {
+    if (!sampleJson || !sampleJson.trim()) {
+      showToast('error', 'Cole um exemplo de JSON de resposta antes de gerar o script.');
+      return;
+    }
+
+    try {
+      let parsed: any;
+      try {
+        parsed = JSON.parse(sampleJson.trim());
+      } catch {
+        showToast('error', 'O modelo de resposta não é um JSON válido.');
+        return;
+      }
+
+      let arrayField = '';
+      let itemObj: any = parsed;
+
+      if (Array.isArray(parsed)) {
+        itemObj = parsed.length > 0 ? parsed[0] : {};
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        for (const k of Object.keys(parsed)) {
+          if (Array.isArray(parsed[k])) {
+            arrayField = k;
+            itemObj = parsed[k].length > 0 ? parsed[k][0] : {};
+            break;
+          }
+        }
+      }
+
+      const itemKeys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
+      const idKey = itemKeys.find(k => /^(id|id_cliente|codigo|cod|protocolo|numero)/i.test(k)) || itemKeys[0] || 'id';
+      const nameKey = itemKeys.find(k => /^(nome|name|razao|descricao|titular)/i.test(k)) || itemKeys[1] || 'nome';
+      const docKey = itemKeys.find(k => /^(cpf|cnpj|cpfcnpj|documento|nin)/i.test(k));
+      const statusKey = itemKeys.find(k => /^(status|situacao|ativo)/i.test(k));
+
+      const respVarName = nodeName ? `_vars.${nodeName.replace(/[^a-zA-Z0-9_]/g, '_')}` : '_vars.resposta_api';
+
+      let generatedScript = '';
+      if (arrayField) {
+        generatedScript = `// Script de tratamento gerado a partir do Modelo de Resposta
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    let items = (raw && raw.${arrayField}) ? raw.${arrayField} : Array.isArray(raw) ? raw : [raw];
+    let primeiro = items.length > 0 ? items[0] : null;
+
+    return {
+        status: items.length > 0 ? 'sucesso' : 'vazio',
+        total: items.length,
+        principal: primeiro ? {
+            ${idKey}: primeiro.${idKey},
+            ${nameKey}: primeiro.${nameKey},${docKey ? `\n            ${docKey}: primeiro.${docKey},` : ''}${statusKey ? `\n            ${statusKey}: primeiro.${statusKey}` : ''}
+        } : null,
+        itens: items.slice(0, 5)
+    };
+} catch (e) {
+    return { status: 'erro', message: e.message };
+}`;
+      } else {
+        generatedScript = `// Script de tratamento gerado a partir do Modelo de Resposta
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    let data = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : raw;
+
+    return {
+        status: 'sucesso',
+        dados: {
+            ${itemKeys.slice(0, 6).map(k => `${k}: data.${k}`).join(',\n            ')}
+        }
+    };
+} catch (e) {
+    return { status: 'erro', message: e.message };
+}`;
+      }
+
+      handleUpdateStep(routeId, stepId, 'filterRules', generatedScript);
+      showToast('success', 'Script JavaScript de tratamento gerado com sucesso!');
+    } catch (err: any) {
+      showToast('error', `Erro: ${err.message}`);
+    }
+  };
+
   // Submit and Generate
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1213,14 +1297,25 @@ export const FlowstreamConverter: React.FC<FlowstreamConverterProps> = ({
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                            Regras de Filtro & Tratamento de Dados
-                          </label>
+                          <div className="flex items-center justify-between gap-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                              Regras de Filtro & Tratamento de Dados
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateStepJsTreatment(route.id, step.id, step.responseSample, step.name)}
+                              className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                              title="Gerar script JavaScript a partir do JSON de resposta"
+                            >
+                              <Sparkles className="w-2.5 h-2.5 text-amber-300 animate-pulse" />
+                              <span>Gerar JS</span>
+                            </button>
+                          </div>
                           <textarea
                             rows={2}
                             value={step.filterRules || ''}
                             onChange={e => handleUpdateStep(route.id, step.id, 'filterRules', e.target.value)}
-                            className="w-full bg-[#040f24] border border-[#0066FF]/15 rounded-xl p-2 text-xs text-slate-300 focus:border-[#00D2FF] focus:outline-none"
+                            className="w-full bg-[#040f24] border border-[#0066FF]/15 rounded-xl p-2 text-xs font-mono text-slate-300 focus:border-[#00D2FF] focus:outline-none"
                           />
                         </div>
                       </div>
