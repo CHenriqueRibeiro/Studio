@@ -340,50 +340,55 @@ Regras e Validações de Negócio:
     }
     setCurlList(prev => prev.filter(c => c.id !== id));
   };
-
   const handleUpdateCurlItem = (id: string, field: keyof CurlItem, value: string) => {
     setCurlList(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
-  const [treatmentToast, setTreatmentToast] = useState<{ id: string; text: string } | null>(null);
-
-  const showTreatmentToast = (id: string, text: string) => {
-    setTreatmentToast({ id, text });
-    setTimeout(() => setTreatmentToast(null), 3500);
-  };
-
-  // Helper to extract keys from sample JSON
-  const getDetectedKeysFromSample = (sampleJson?: string): { arrayField: string; keys: string[] } => {
-    if (!sampleJson || !sampleJson.trim()) return { arrayField: '', keys: [] };
+  const getDetectedKeysFromSample = (sampleJson?: string) => {
+    if (!sampleJson || !sampleJson.trim()) return { arrayField: '', objectField: '', keys: [] };
     try {
       const parsed = JSON.parse(sampleJson.trim());
       let arrayField = '';
-      let itemObj: any = parsed;
+      let objectField = '';
+      const keysSet = new Set<string>();
 
-      if (Array.isArray(parsed)) {
-        itemObj = parsed.length > 0 ? parsed[0] : {};
-      } else if (typeof parsed === 'object' && parsed !== null) {
-        for (const k of Object.keys(parsed)) {
-          if (Array.isArray(parsed[k])) {
-            arrayField = k;
-            itemObj = parsed[k].length > 0 ? parsed[k][0] : {};
-            break;
-          } else if (parsed[k] && typeof parsed[k] === 'object') {
-            for (const sk of Object.keys(parsed[k])) {
-              if (Array.isArray(parsed[k][sk])) {
-                arrayField = `${k}.${sk}`;
-                itemObj = parsed[k][sk].length > 0 ? parsed[k][sk][0] : {};
-                break;
-              }
+      const inspect = (obj: any, parentKey = '') => {
+        if (!obj || typeof obj !== 'object') return;
+        if (Array.isArray(obj)) {
+          if (obj.length > 0 && typeof obj[0] === 'object' && obj[0] !== null && !Array.isArray(obj[0])) {
+            Object.keys(obj[0]).forEach(k => keysSet.add(k));
+          }
+          return;
+        }
+        Object.keys(obj).forEach(k => {
+          if (!parentKey) keysSet.add(k);
+          const val = obj[k];
+          if (val && typeof val === 'object' && !Array.isArray(val)) {
+            if (!objectField && !parentKey && (k === 'cliente' || k === 'data' || k === 'result' || k === 'usuario' || k === 'dados' || k === 'item' || k === 'fatura')) {
+              objectField = k;
+            }
+            Object.keys(val).forEach(subK => keysSet.add(subK));
+          } else if (Array.isArray(val)) {
+            if (val.length > 0 && typeof val[0] === 'object' && val[0] !== null) {
+              if (!arrayField) arrayField = parentKey ? `${parentKey}.${k}` : k;
+              Object.keys(val[0]).forEach(subK => keysSet.add(subK));
             }
           }
+        });
+      };
+
+      if (Array.isArray(parsed)) {
+        if (parsed.length > 0 && typeof parsed[0] === 'object') {
+          inspect(parsed[0]);
         }
+      } else {
+        inspect(parsed);
       }
 
-      const keys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
-      return { arrayField, keys };
+      const keys = Array.from(keysSet).filter(k => Boolean(k) && typeof k === 'string');
+      return { arrayField, objectField, keys };
     } catch {
-      return { arrayField: '', keys: [] };
+      return { arrayField: '', objectField: '', keys: [] };
     }
   };
 
@@ -402,31 +407,7 @@ Regras e Validações de Negócio:
         return;
       }
 
-      let arrayField = '';
-      let itemObj: any = parsed;
-
-      if (Array.isArray(parsed)) {
-        itemObj = parsed.length > 0 ? parsed[0] : {};
-      } else if (typeof parsed === 'object' && parsed !== null) {
-        const keys = Object.keys(parsed);
-        for (const k of keys) {
-          if (Array.isArray(parsed[k])) {
-            arrayField = k;
-            itemObj = parsed[k].length > 0 ? parsed[k][0] : {};
-            break;
-          } else if (parsed[k] && typeof parsed[k] === 'object') {
-            for (const sk of Object.keys(parsed[k])) {
-              if (Array.isArray(parsed[k][sk])) {
-                arrayField = `${k}.${sk}`;
-                itemObj = parsed[k][sk].length > 0 ? parsed[k][sk][0] : {};
-                break;
-              }
-            }
-          }
-        }
-      }
-
-      const allKeys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
+      const { arrayField, objectField, keys: allKeys } = getDetectedKeysFromSample(sampleJson);
 
       if (allKeys.length === 0) {
         showTreatmentToast(itemId, '⚠️ Nenhum campo detectado no JSON fornecido.');
@@ -481,49 +462,29 @@ Regras e Validações de Negócio:
 
       let generatedScript = '';
       if (arrayField) {
-        generatedScript = `// Script de tratamento JavaScript gerado via IA a partir da instrução:
-// "${userPrompt || `Extrair ${activeFields.join(', ')} de ${arrayField}`}"
+        generatedScript = `// Script de tratamento gerado com base no Modelo de Resposta e Regras
 try {
     let raw = ${respVarName} || _vars.resposta_api;
     if (typeof raw === 'string') raw = JSON.parse(raw);
 
-    // Descompactação automática da coleção "${arrayField}"
     let items = (raw && raw.${arrayField}) ? raw.${arrayField} :
                 (raw && raw.data) ? raw.data :
                 (raw && raw.result && raw.result.items) ? raw.result.items :
                 Array.isArray(raw) ? raw : [raw];
 
-${filterActiveMatch ? `    // Filtrar apenas registros com status ativo\n    items = items.filter(i => String(i.status || i.situacao || '').toUpperCase().includes('ATIVO'));\n` : ''}
+${filterActiveMatch ? `    // Filtrar apenas registros com status ativo\n    items = items.filter(it => it && (it.status === 'ATIVO' || it.ativo === true || it.situacao === 'A'));\n` : ''}
     let total = items.length;
-    let selecionado = total > 0 ? items[0] : null;
+    let primeiro = total > 0 ? items[0] : null;
 
     return {
         status: total > 0 ? 'sucesso' : 'vazio',
-        total_encontrados: total,
-        principal: selecionado ? {
-${activeFields.map(k => {
-  const isSubArray = Array.isArray(itemObj[k]);
-  return isSubArray
-    ? `            ${k}: (selecionado.${k} || []).slice(0, 3)`
-    : `            ${k}: selecionado.${k}`;
-}).join(',\n')}
+        total: total,
+        principal: primeiro ? {
+${activeFields.map(k => `            ${k}: primeiro.${k} !== undefined ? primeiro.${k} : null`).join(',\n')}
         } : null,
         itens: items.slice(0, ${limitCount})
     };
 } catch (e) {
-    return { status: 'erro', message: 'Falha ao processar dados da API', details: e.message };
-}`;
-      } else {
-        generatedScript = `// Script de tratamento JavaScript gerado via IA a partir da instrução:
-// "${userPrompt || `Extrair ${activeFields.join(', ')}`}"
-try {
-    let raw = ${respVarName} || _vars.resposta_api;
-    if (typeof raw === 'string') raw = JSON.parse(raw);
-    let data = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : raw;
-
-    return {
-        status: 'sucesso',
-        dados: {
 ${activeFields.map(k => `            ${k}: data.${k}`).join(',\n')}
         }
     };
