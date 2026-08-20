@@ -772,30 +772,7 @@ ${activeFields.map(k => `            ${k}: principal.${k} !== undefined ? princi
         return;
       }
 
-      let arrayField = '';
-      let itemObj: any = sourceObj;
-
-      if (Array.isArray(sourceObj)) {
-        itemObj = sourceObj.length > 0 ? sourceObj[0] : {};
-      } else if (typeof sourceObj === 'object' && sourceObj !== null) {
-        for (const k of Object.keys(sourceObj)) {
-          if (Array.isArray(sourceObj[k])) {
-            arrayField = k;
-            itemObj = sourceObj[k].length > 0 ? sourceObj[k][0] : {};
-            break;
-          } else if (sourceObj[k] && typeof sourceObj[k] === 'object') {
-            for (const sk of Object.keys(sourceObj[k])) {
-              if (Array.isArray(sourceObj[k][sk])) {
-                arrayField = `${k}.${sk}`;
-                itemObj = sourceObj[k][sk].length > 0 ? sourceObj[k][sk][0] : {};
-                break;
-              }
-            }
-          }
-        }
-      }
-
-      const sourceKeys = (itemObj && typeof itemObj === 'object') ? Object.keys(itemObj) : [];
+      const { arrayField, objectField, keys: sourceKeys } = getDetectedKeysFromSample(sampleJson);
 
       let targetKeys: string[] = [];
       try {
@@ -819,7 +796,7 @@ ${activeFields.map(k => `            ${k}: principal.${k} !== undefined ? princi
         const exact = sourceKeys.find(s => s.toLowerCase() === tLower);
         const partial = sourceKeys.find(s => s.toLowerCase().includes(tLower) || tLower.includes(s.toLowerCase()));
         const matched = exact || partial || tKey;
-        mappingLines.push(`            ${tKey}: principal.${matched} !== undefined ? principal.${matched} : null`);
+        mappingLines.push(`            ${tKey}: principal.${matched} !== undefined ? principal.${matched} : (raw && raw.${matched} !== undefined ? raw.${matched} : null)`);
       });
 
       const respVarName = nodeName ? `_vars.${nodeName.replace(/[^a-zA-Z0-9_]/g, '_')}` : '_vars.resposta_api';
@@ -849,11 +826,12 @@ ${mappingLines.join(',\n')}
     return { status: 'erro', message: 'Falha ao mapear retorno da API', details: e.message };
 }`;
       } else {
+        const objAccessor = objectField ? `(raw && raw.${objectField}) ? raw.${objectField} : ` : '';
         generatedScript = `// Script de mapeamento para o modelo de saída desejado
 try {
     let raw = ${respVarName} || _vars.resposta_api;
     if (typeof raw === 'string') raw = JSON.parse(raw);
-    let principal = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : (raw || {});
+    let principal = ${objAccessor}(raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : (raw || {});
 
     // Mapeamento transformado estritamente para o Modelo de Retorno Desejado
     return {
