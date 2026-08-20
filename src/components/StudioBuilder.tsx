@@ -587,7 +587,7 @@ Regras e Validações de Negócio:
                   : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
                   }`}
               >
-                <span>Gemini (Local)</span>
+                <span>Gemini</span>
               </button>
 
               <button

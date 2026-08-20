@@ -49,12 +49,62 @@ export default function App() {
     }
   }, [theme]);
 
-  // Current loaded Agent and Workflows
-  const [agent, setAgent] = useState<ForticsAgent>(DEFAULT_AGENT_SCHEMA_TEMPLATE);
-  const [workflow, setWorkflow] = useState<ForticsWorkflow>(DEFAULT_WORKFLOW_SCHEMA_TEMPLATE);
-  const [workflows, setWorkflows] = useState<ForticsWorkflow[]>([DEFAULT_WORKFLOW_SCHEMA_TEMPLATE]);
-  const [hasGenerated, setHasGenerated] = useState<boolean>(false);
-  const [showJsonSection, setShowJsonSection] = useState<boolean>(false);
+  // Current loaded Agent and Workflows backed by sessionStorage
+  const [agent, setAgent] = useState<ForticsAgent>(() => {
+    try {
+      const saved = sessionStorage.getItem('fortics_current_agent');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return DEFAULT_AGENT_SCHEMA_TEMPLATE;
+  });
+
+  const [workflow, setWorkflow] = useState<ForticsWorkflow>(() => {
+    try {
+      const saved = sessionStorage.getItem('fortics_current_workflow');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return DEFAULT_WORKFLOW_SCHEMA_TEMPLATE;
+  });
+
+  const [workflows, setWorkflows] = useState<ForticsWorkflow[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('fortics_current_workflows');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [DEFAULT_WORKFLOW_SCHEMA_TEMPLATE];
+  });
+
+  const [hasGenerated, setHasGenerated] = useState<boolean>(() => {
+    return sessionStorage.getItem('fortics_has_generated') === 'true';
+  });
+
+  const [showJsonSection, setShowJsonSection] = useState<boolean>(() => {
+    return sessionStorage.getItem('fortics_show_json') === 'true';
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('fortics_current_agent', JSON.stringify(agent));
+    } catch (_) {}
+  }, [agent]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('fortics_current_workflow', JSON.stringify(workflow));
+    } catch (_) {}
+  }, [workflow]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('fortics_current_workflows', JSON.stringify(workflows));
+    } catch (_) {}
+  }, [workflows]);
+
+  useEffect(() => {
+    sessionStorage.setItem('fortics_has_generated', String(hasGenerated));
+    sessionStorage.setItem('fortics_show_json', String(showJsonSection));
+  }, [hasGenerated, showJsonSection]);
+
   const resultsRef = useRef<HTMLDivElement>(null);
 
   const [variableChainSummary, setVariableChainSummary] = useState<string>(
@@ -103,11 +153,32 @@ export default function App() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.details || err.error || 'Erro ao gerar especificações Fortics');
+        let errorMsg = `Erro na requisição (${res.status} ${res.statusText || 'Erro no servidor'})`;
+        try {
+          const err = await res.json();
+          errorMsg = err.details || err.error || err.message || errorMsg;
+        } catch {
+          try {
+            const rawText = await res.text();
+            if (rawText && rawText.trim().length > 0) {
+              const cleanText = rawText.replace(/<[^>]*>?/gm, '').trim();
+              if (cleanText) {
+                errorMsg += `: ${cleanText.slice(0, 200)}`;
+              }
+            }
+          } catch (_) {
+            // ignore text parsing error
+          }
+        }
+        throw new Error(errorMsg);
       }
 
-      const data: GenerationResponse = await res.json();
+      let data: GenerationResponse;
+      try {
+        data = await res.json();
+      } catch (jsonErr: any) {
+        throw new Error(`Resposta inválida do servidor: ${jsonErr.message}`);
+      }
 
       if (data.agent) {
         setAgent(data.agent);
