@@ -135,6 +135,22 @@ export const FlowstreamConverter: React.FC<FlowstreamConverterProps> = ({
     }));
   };
 
+  // Selected Squad Agent for Interactive Live Preview and Route Filtering
+  const [selectedSquadAgentId, setSelectedSquadAgentId] = useState<string>('all');
+  const [routeFilterMode, setRouteFilterMode] = useState<string>('all'); // 'all' or agentId
+
+  const activeSquadAgent = agentsList.find(a => a.id === selectedSquadAgentId);
+
+  const getEffectiveRoutesForAgent = (agentId: string | 'all') => {
+    if (agentId === 'all') return routesList;
+    return routesList.filter(r => {
+      if (!r.assignedAgentIds || r.assignedAgentIds.length === 0) {
+        return agentId === agentsList[0]?.id;
+      }
+      return r.assignedAgentIds.includes(agentId);
+    });
+  };
+
   // Total.js FlowStream Raw JSON State
   const [rawJson, setRawJson] = useState<string>('');
   const [parseError, setParseError] = useState<string | null>(null);
@@ -1280,39 +1296,107 @@ ${mappingLines.join(',\n')}
               O comportamento do robô, a ordem de coleta de dados e as ferramentas acionadas são orquestradas automaticamente a partir das rotas extraídas do FlowStream.
             </p>
 
-            {/* Preview em Tempo Real dos Passos */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <ListOrdered className="w-3.5 h-3.5 text-[#00D2FF]" />
-                <span>Fluxo de passos que o Agente executará no chat:</span>
-              </label>
-              <div className="p-3 bg-[#020b18] border border-[#0066FF]/30 rounded-xl space-y-1.5 text-xs text-slate-200 font-mono">
-                <div className="flex items-center gap-2 text-slate-300">
-                  <span className="w-5 h-5 rounded-full bg-[#0066FF] flex items-center justify-center text-[10px] font-black text-white shrink-0">1</span>
-                  <span>Cumprimentar o cliente e solicitar documento/parâmetro inicial</span>
-                </div>
-
-                {routesList.map((r, idx) => {
-                  const cleanName = (r.name || `Operação ${idx + 1}`).replace(/^[0-9.\-_ ]+/, '').trim();
-                  const isChained = r.curlItems.length > 1;
-                  return (
-                    <div key={r.id || idx} className="flex items-center gap-2 text-cyan-200">
-                      <span className="w-5 h-5 rounded-full bg-[#0066FF]/70 flex items-center justify-center text-[10px] font-bold text-white shrink-0">{idx + 2}</span>
-                      <span>
-                        {idx === 0
-                          ? <>Executar a <strong>{cleanName.toLowerCase()}</strong> com o documento informado {isChained && <span className="text-[10px] text-amber-400 font-sans">({r.curlItems.length} chamadas em cadeia interna)</span>}</>
-                          : <>Com o identificador retornado na etapa anterior, executar a <strong>{cleanName.toLowerCase()}</strong> {isChained && <span className="text-[10px] text-amber-400 font-sans">({r.curlItems.length} chamadas em cadeia interna)</span>}</>
-                        }
-                      </span>
-                    </div>
-                  );
-                })}
-
-                <div className="flex items-center gap-2 text-emerald-300">
-                  <span className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-black text-white shrink-0">{routesList.length + 2}</span>
-                  <span>Confirmar os dados e entregar o resultado estruturado ao cliente</span>
+            {/* Seletor de Agente para Simulação dos Passos */}
+            {agentsList.length > 1 && (
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
+                  Visualizar Passos e Comportamento por Agente:
+                </label>
+                <div className="flex items-center gap-1.5 p-1.5 bg-[#020b18] border border-[#0066FF]/35 rounded-2xl overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSquadAgentId('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                      selectedSquadAgentId === 'all'
+                        ? 'bg-linear-to-r from-[#0052FF] to-[#00D2FF] text-white shadow-md'
+                        : 'text-slate-400 hover:text-white hover:bg-[#061833]'
+                    }`}
+                  >
+                    <span>🌐 Visão Global ({routesList.length} rotas)</span>
+                  </button>
+                  {agentsList.map((ag) => {
+                    const effRoutes = getEffectiveRoutesForAgent(ag.id);
+                    const isSelected = selectedSquadAgentId === ag.id;
+                    return (
+                      <button
+                        key={ag.id}
+                        type="button"
+                        onClick={() => setSelectedSquadAgentId(ag.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-linear-to-r from-[#0052FF] to-[#00D2FF] text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-[#061833]'
+                        }`}
+                      >
+                        <Bot className="w-3.5 h-3.5" />
+                        <span>{ag.name}</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                          effRoutes.length > 0 ? 'bg-cyan-500/20 text-cyan-300' : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                          {effRoutes.length} {effRoutes.length === 1 ? 'rota' : 'rotas'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+            )}
+
+            {/* Preview em Tempo Real dos Passos */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center justify-between gap-1.5">
+                <span className="flex items-center gap-1.5">
+                  <ListOrdered className="w-3.5 h-3.5 text-[#00D2FF]" />
+                  <span>
+                    Fluxo de passos {activeSquadAgent ? <>do <strong>{activeSquadAgent.name}</strong></> : 'do Agente'} no chat:
+                  </span>
+                </span>
+                <span className="text-[10px] text-cyan-300 font-mono">
+                  {getEffectiveRoutesForAgent(selectedSquadAgentId).length} {getEffectiveRoutesForAgent(selectedSquadAgentId).length === 1 ? 'workflow vinculado' : 'workflows vinculados'}
+                </span>
+              </label>
+
+              {getEffectiveRoutesForAgent(selectedSquadAgentId).length === 0 ? (
+                <div className="p-4 bg-[#020b18] border border-amber-500/40 rounded-xl text-xs text-amber-200 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    <span>Nenhum workflow atribuído ao {activeSquadAgent?.name || 'Agente'}.</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Role a página até a seção de <strong>Rotas Extraídas</strong> abaixo e marque o botão deste agente nas rotas que ele deve executar.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-[#020b18] border border-[#0066FF]/30 rounded-xl space-y-1.5 text-xs text-slate-200 font-mono">
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <span className="w-5 h-5 rounded-full bg-[#0066FF] flex items-center justify-center text-[10px] font-black text-white shrink-0">1</span>
+                    <span>Cumprimentar o cliente e solicitar documento/parâmetro inicial</span>
+                  </div>
+
+                  {getEffectiveRoutesForAgent(selectedSquadAgentId).map((r, idx) => {
+                    const cleanName = (r.name || `Operação ${idx + 1}`).replace(/^[0-9.\-_ ]+/, '').trim();
+                    const isChained = r.curlItems.length > 1;
+                    return (
+                      <div key={r.id || idx} className="flex items-center gap-2 text-cyan-200">
+                        <span className="w-5 h-5 rounded-full bg-[#0066FF]/70 flex items-center justify-center text-[10px] font-bold text-white shrink-0">{idx + 2}</span>
+                        <span>
+                          {idx === 0
+                            ? <>Executar a <strong>{cleanName.toLowerCase()}</strong> com o documento informado {isChained && <span className="text-[10px] text-amber-400 font-sans">({r.curlItems.length} chamadas em cadeia interna)</span>}</>
+                            : <>Com o identificador retornado na etapa anterior, executar a <strong>{cleanName.toLowerCase()}</strong> {isChained && <span className="text-[10px] text-amber-400 font-sans">({r.curlItems.length} chamadas em cadeia interna)</span>}</>
+                          }
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  <div className="flex items-center gap-2 text-emerald-300">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-black text-white shrink-0">
+                      {getEffectiveRoutesForAgent(selectedSquadAgentId).length + 2}
+                    </span>
+                    <span>Confirmar os dados e entregar o resultado estruturado ao cliente</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Campo Opcional para Regras Adicionais */}
@@ -1474,46 +1558,128 @@ ${mappingLines.join(',\n')}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {agentsList.map((ag, agIdx) => (
-                <div key={ag.id} className="p-3 bg-[#020b18] border border-[#0066FF]/30 rounded-2xl space-y-2 relative">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold text-[#00D2FF] uppercase font-mono">
-                      Agente {agIdx + 1}
-                    </span>
-                    {agentsList.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAgent(ag.id)}
-                        className="text-slate-500 hover:text-rose-400 text-xs transition-colors cursor-pointer"
-                        title="Remover este agente do Squad"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+              {agentsList.map((ag, agIdx) => {
+                const isSelected = selectedSquadAgentId === ag.id;
+                const effRoutes = getEffectiveRoutesForAgent(ag.id);
+                return (
+                  <div
+                    key={ag.id}
+                    onClick={() => setSelectedSquadAgentId(ag.id)}
+                    className={`p-3.5 rounded-2xl space-y-2.5 relative transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-[#061c3d] border-[#00D2FF] ring-2 ring-[#00D2FF]/40 shadow-xl'
+                        : 'bg-[#020b18] border-[#0066FF]/30 hover:border-[#0066FF]/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-[#00D2FF] uppercase font-mono">
+                          Agente {agIdx + 1}
+                        </span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold ${
+                          effRoutes.length > 0 ? 'bg-cyan-500/20 text-cyan-300' : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                          {effRoutes.length} {effRoutes.length === 1 ? 'rota' : 'rotas'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {isSelected ? (
+                          <span className="px-2 py-0.5 rounded-full bg-[#00D2FF]/20 text-[#00D2FF] text-[9px] font-bold border border-[#00D2FF]/40 animate-pulse">
+                            ● Ativo
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-500 hover:text-slate-300">
+                            Selecionar
+                          </span>
+                        )}
+
+                        {agentsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveAgent(ag.id);
+                            }}
+                            className="text-slate-500 hover:text-rose-400 text-xs transition-colors cursor-pointer p-0.5"
+                            title="Remover este agente do Squad"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={ag.name}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => handleUpdateAgent(ag.id, 'name', e.target.value)}
+                      placeholder="Nome do Agente (ex: Agente Financeiro)"
+                      className="w-full bg-[#061833] border border-[#0066FF]/25 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:border-[#00D2FF] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={ag.role || ''}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => handleUpdateAgent(ag.id, 'role', e.target.value)}
+                      placeholder="Especialidade / Departamento (ex: Cobrança e Boletos)"
+                      className="w-full bg-[#061833] border border-[#0066FF]/25 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 focus:border-[#00D2FF] focus:outline-none"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={ag.name}
-                    onChange={e => handleUpdateAgent(ag.id, 'name', e.target.value)}
-                    placeholder="Nome do Agente (ex: Agente Financeiro)"
-                    className="w-full bg-[#061833] border border-[#0066FF]/25 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:border-[#00D2FF] focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    value={ag.role || ''}
-                    onChange={e => handleUpdateAgent(ag.id, 'role', e.target.value)}
-                    placeholder="Especialidade / Departamento (ex: Cobrança e Boletos)"
-                    className="w-full bg-[#061833] border border-[#0066FF]/25 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 focus:border-[#00D2FF] focus:outline-none"
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
+          </div>
+        )}
+
+        {/* Barra de Filtro de Visualização de Rotas */}
+        {studioMode === 'both' && agentsList.length > 1 && (
+          <div className="flex items-center gap-2 p-2 bg-[#020b18] border border-[#0066FF]/35 rounded-2xl overflow-x-auto">
+            <span className="text-[10px] font-bold text-slate-400 uppercase font-mono px-2 shrink-0">
+              Filtrar Lista de Rotas:
+            </span>
+            <button
+              type="button"
+              onClick={() => setRouteFilterMode('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                routeFilterMode === 'all'
+                  ? 'bg-linear-to-r from-[#0052FF] to-[#00D2FF] text-white shadow-md'
+                  : 'text-slate-400 hover:text-white hover:bg-[#061833]'
+              }`}
+            >
+              <span>Todas as Rotas ({routesList.length})</span>
+            </button>
+            {agentsList.map(ag => {
+              const count = getEffectiveRoutesForAgent(ag.id).length;
+              return (
+                <button
+                  key={ag.id}
+                  type="button"
+                  onClick={() => setRouteFilterMode(ag.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                    routeFilterMode === ag.id
+                      ? 'bg-linear-to-r from-[#0052FF] to-[#00D2FF] text-white shadow-md'
+                      : 'text-slate-400 hover:text-white hover:bg-[#061833]'
+                  }`}
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>{ag.name} ({count})</span>
+                </button>
+              );
+            })}
           </div>
         )}
 
         {/* Cards de Rotas Extraídas */}
         <div className="space-y-6">
-          {routesList.map((route, routeIdx) => {
+          {routesList
+            .filter(r => {
+              if (routeFilterMode === 'all') return true;
+              const assigned = r.assignedAgentIds && r.assignedAgentIds.length > 0 ? r.assignedAgentIds : [agentsList[0]?.id];
+              return assigned.includes(routeFilterMode);
+            })
+            .map((route, routeIdx) => {
             const isChained = route.curlItems.length > 1;
 
             return (
