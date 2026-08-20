@@ -202,7 +202,9 @@ export interface CurlItem {
   id: string;
   name: string;
   curl: string;
+  treatmentMode?: 'auto_ai' | 'natural_language' | 'target_schema';
   responseSample?: string;
+  targetOutputModel?: string; // Modelo de saída desejado (JSON ou texto)
   filterRules?: string; // Instrução em linguagem natural do que extrair/filtrar
   generatedJsCode?: string; // Código JavaScript de tratamento gerado
   nodeName?: string; // e.g. "token", "busca_cadastro", "gravar_agendamento"

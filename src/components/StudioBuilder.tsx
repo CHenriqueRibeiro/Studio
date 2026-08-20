@@ -557,7 +557,6 @@ ${activeFields.map(k => `            ${k}: data.${k}`).join(',\n')}
     const fieldLower = fieldName.toLowerCase();
 
     if (lowerPrompt.includes(`remover ${fieldLower}`) || lowerPrompt.includes(`sem ${fieldLower}`)) {
-      // Switch back to include
       newPrompt = currentPrompt
         .replace(new RegExp(`(?:remover|retirar|tirar|sem|descartar)\\s+${fieldLower}`, 'gi'), '')
         .replace(/\s+/g, ' ')
@@ -566,14 +565,138 @@ ${activeFields.map(k => `            ${k}: data.${k}`).join(',\n')}
         newPrompt += ` Incluir ${fieldName}.`;
       }
     } else if (lowerPrompt.includes(fieldLower)) {
-      // Switch to remove
       newPrompt = (currentPrompt ? currentPrompt + ' ' : '') + `Remover ${fieldName}.`;
     } else {
-      // Add inclusion
       newPrompt = (currentPrompt ? currentPrompt + ', ' : 'Extrair ') + `${fieldName}`;
     }
 
     handleGenerateJsTreatment(itemId, sampleJson, nodeName, newPrompt.trim());
+  };
+
+  const handleGenerateJsFromTargetSchema = (itemId: string, sampleJson?: string, targetSchema?: string, nodeName?: string) => {
+    if (!sampleJson || !sampleJson.trim()) {
+      showTreatmentToast(itemId, '⚠️ Cole um exemplo da resposta bruta da API antes de mapear.');
+      return;
+    }
+    if (!targetSchema || !targetSchema.trim()) {
+      showTreatmentToast(itemId, '⚠️ Cole ou digite o modelo do retorno desejado.');
+      return;
+    }
+
+    try {
+      let sourceObj: any;
+      try {
+        sourceObj = JSON.parse(sampleJson.trim());
+      } catch {
+        showTreatmentToast(itemId, '❌ O modelo de resposta da API não é um JSON válido.');
+        return;
+      }
+
+      let arrayField = '';
+      let itemObj: any = sourceObj;
+
+      if (Array.isArray(sourceObj)) {
+        itemObj = sourceObj.length > 0 ? sourceObj[0] : {};
+      } else if (typeof sourceObj === 'object' && sourceObj !== null) {
+        for (const k of Object.keys(sourceObj)) {
+          if (Array.isArray(sourceObj[k])) {
+            arrayField = k;
+            itemObj = sourceObj[k].length > 0 ? sourceObj[k][0] : {};
+            break;
+          } else if (sourceObj[k] && typeof sourceObj[k] === 'object') {
+            for (const sk of Object.keys(sourceObj[k])) {
+              if (Array.isArray(sourceObj[k][sk])) {
+                arrayField = `${k}.${sk}`;
+                itemObj = sourceObj[k][sk].length > 0 ? sourceObj[k][sk][0] : {};
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const sourceKeys = (itemObj && typeof itemObj === 'object') ? Object.keys(itemObj) : [];
+
+      let targetKeys: string[] = [];
+      try {
+        const parsedTarget = JSON.parse(targetSchema.trim());
+        targetKeys = Object.keys(parsedTarget);
+      } catch {
+        targetKeys = targetSchema
+          .split(/[\n,;]+/)
+          .map(s => s.trim().replace(/[^a-zA-Z0-9_]/g, ''))
+          .filter(Boolean);
+      }
+
+      if (targetKeys.length === 0) {
+        showTreatmentToast(itemId, '⚠️ Nenhum campo identificado no modelo desejado.');
+        return;
+      }
+
+      const mappingLines: string[] = [];
+      targetKeys.forEach(tKey => {
+        const tLower = tKey.toLowerCase();
+        const exact = sourceKeys.find(s => s.toLowerCase() === tLower);
+        const partial = sourceKeys.find(s => s.toLowerCase().includes(tLower) || tLower.includes(s.toLowerCase()));
+        const matched = exact || partial || tKey;
+        mappingLines.push(`            ${tKey}: principal.${matched} !== undefined ? principal.${matched} : null`);
+      });
+
+      const respVarName = nodeName ? `_vars.${nodeName.replace(/[^a-zA-Z0-9_]/g, '_')}` : '_vars.resposta_api';
+
+      let generatedScript = '';
+      if (arrayField) {
+        generatedScript = `// Script de mapeamento para o modelo de saída desejado
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+
+    let items = (raw && raw.${arrayField}) ? raw.${arrayField} :
+                (raw && raw.data) ? raw.data :
+                (raw && raw.result && raw.result.items) ? raw.result.items :
+                Array.isArray(raw) ? raw : [raw];
+
+    let principal = items.length > 0 ? items[0] : (raw || {});
+
+    // Mapeamento transformado estritamente para o Modelo de Retorno Desejado
+    return {
+        status: items.length > 0 ? 'sucesso' : 'vazio',
+        dados: {
+${mappingLines.join(',\n')}
+        }
+    };
+} catch (e) {
+    return { status: 'erro', message: 'Falha ao mapear retorno da API', details: e.message };
+}`;
+      } else {
+        generatedScript = `// Script de mapeamento para o modelo de saída desejado
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    let principal = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : (raw || {});
+
+    // Mapeamento transformado estritamente para o Modelo de Retorno Desejado
+    return {
+        status: 'sucesso',
+        dados: {
+${mappingLines.join(',\n')}
+        }
+    };
+} catch (e) {
+    return { status: 'erro', message: 'Falha ao mapear retorno da API', details: e.message };
+}`;
+      }
+
+      setCurlList(prev => prev.map(c => c.id === itemId ? {
+        ...c,
+        targetOutputModel: targetSchema,
+        generatedJsCode: generatedScript
+      } : c));
+
+      showTreatmentToast(itemId, '✨ Mapeamento para o modelo de retorno gerado com sucesso!');
+    } catch (err: any) {
+      showTreatmentToast(itemId, `❌ Erro ao mapear: ${err.message}`);
+    }
   };
 
   const handleMoveCurlUp = (index: number) => {
@@ -1397,120 +1520,232 @@ ${activeFields.map(k => `            ${k}: data.${k}`).join(',\n')}
                     />
                   </div>
 
-                  {/* Grid: Modelo de Resposta JSON + Regras em Linguagem Natural */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-
-                    {/* Modelo de Resposta */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5" />
-                        1. Modelo de Resposta da API (JSON de Exemplo)
+                  {/* Tratamento / Extração de Dados: 3 Modos Flexíveis */}
+                  <div className="space-y-3 pt-2 border-t border-[#0066FF]/20">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                        Tratamento no Nó de Código (O que retornar ao Agente)
                       </label>
-                      <textarea
-                        rows={7}
-                        value={item.responseSample || ''}
-                        onChange={e => handleUpdateCurlItem(item.id, 'responseSample', e.target.value)}
-                        placeholder={`{\n  "status": "success",\n  "clientes": [\n    {\n      "nome": "CARLOS SILVA",\n      "cpfcnpj": "12345678900",\n      "contratos": [{ "id": 101, "status": "ATIVO" }]\n    }\n  ]\n}`}
-                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-emerald-200 font-mono leading-relaxed focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Regras em Linguagem Natural */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <ShieldCheck className="w-3.5 h-3.5" />
-                          2. O que Extrair / Instrução (Linguagem Natural)
-                        </label>
+                      <div className="flex items-center gap-1 p-0.5 bg-[#020b18] border border-[#0066FF]/30 rounded-lg">
                         <button
                           type="button"
-                          onClick={() => handleGenerateJsTreatment(item.id, item.responseSample, item.name, item.filterRules)}
-                          className="px-2.5 py-0.5 rounded-md bg-linear-to-r from-amber-500/20 via-emerald-500/20 to-[#00D2FF]/20 hover:from-amber-500/30 hover:to-[#00D2FF]/30 border border-amber-400/40 hover:border-amber-300 text-amber-300 hover:text-amber-100 text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer transform active:scale-95"
-                          title="Atualizar o script JS com base na sua instrução em linguagem natural e no modelo de resposta"
+                          onClick={() => handleUpdateCurlItem(item.id, 'treatmentMode', 'auto_ai')}
+                          className={`py-1 px-2.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                            (!item.treatmentMode || item.treatmentMode === 'auto_ai')
+                              ? 'bg-linear-to-r from-[#0052FF] to-[#00D2FF] text-white shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
                         >
-                          <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
-                          <span>Atualizar Script JS</span>
+                          <Sparkles className="w-3 h-3 text-cyan-300" />
+                          <span>1. IA Automática</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateCurlItem(item.id, 'treatmentMode', 'natural_language')}
+                          className={`py-1 px-2.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                            item.treatmentMode === 'natural_language'
+                              ? 'bg-linear-to-r from-amber-600 to-amber-400 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Edit3 className="w-3 h-3 text-amber-300" />
+                          <span>2. Linguagem Natural</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateCurlItem(item.id, 'treatmentMode', 'target_schema')}
+                          className={`py-1 px-2.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                            item.treatmentMode === 'target_schema'
+                              ? 'bg-linear-to-r from-emerald-600 to-teal-400 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Columns className="w-3 h-3 text-emerald-300" />
+                          <span>3. Modelo de Retorno</span>
                         </button>
                       </div>
+                    </div>
 
-                      {treatmentToast && treatmentToast.id === item.id && (
-                        <div className="px-2.5 py-1 rounded-lg bg-[#041a38] border border-[#00D2FF]/40 text-[#00D2FF] text-[11px] font-medium flex items-center gap-1.5 animate-fadeIn">
-                          <span>{treatmentToast.text}</span>
-                        </div>
-                      )}
+                    {treatmentToast && treatmentToast.id === item.id && (
+                      <div className="px-2.5 py-1 rounded-lg bg-[#041a38] border border-[#00D2FF]/40 text-[#00D2FF] text-[11px] font-medium flex items-center gap-1.5 animate-fadeIn">
+                        <span>{treatmentToast.text}</span>
+                      </div>
+                    )}
 
-                      <textarea
-                        rows={3}
-                        value={item.filterRules || ''}
-                        onChange={e => handleUpdateCurlItem(item.id, 'filterRules', e.target.value)}
-                        placeholder={`Ex: Extrair nome, CPF e contratos ativos. Remover o campo tipo e endereço.`}
-                        className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-sans leading-relaxed focus:border-amber-500 focus:outline-none"
-                      />
-
-                      {/* Detected Field Chips (Clickable to Add/Remove) */}
-                      {(() => {
-                        const detected = getDetectedKeysFromSample(item.responseSample);
-                        if (detected.keys.length === 0) return null;
-                        return (
-                          <div className="pt-1">
-                            <div className="text-[10px] text-slate-400 font-sans mb-1 flex items-center gap-1">
-                              <span>Campos detectados no JSON (clique para incluir/remover):</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-                              {detected.keys.map(k => {
-                                const isRemoved = (item.filterRules || '').toLowerCase().includes(`remover ${k.toLowerCase()}`) || (item.filterRules || '').toLowerCase().includes(`sem ${k.toLowerCase()}`);
-                                return (
-                                  <button
-                                    key={k}
-                                    type="button"
-                                    onClick={() => handleToggleFieldInPrompt(item.id, item.filterRules || '', k, item.responseSample, item.name)}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer border ${
-                                      isRemoved
-                                        ? 'bg-rose-950/40 border-rose-600/40 text-rose-300 line-through'
-                                        : 'bg-[#061e3d] border-[#0066FF]/40 text-cyan-300 hover:border-[#00D2FF] hover:bg-[#082a54]'
-                                    }`}
-                                    title={isRemoved ? `Clique para incluir ${k}` : `Clique para remover ${k}`}
-                                  >
-                                    {isRemoved ? `✕ ${k}` : `✓ ${k}`}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                    {/* MODO 1: IA AUTOMÁTICA */}
+                    {(!item.treatmentMode || item.treatmentMode === 'auto_ai') && (
+                      <div className="p-3.5 rounded-xl bg-[#020b18]/80 border border-[#0066FF]/25 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-[#0066FF]/20 border border-[#00D2FF]/30 flex items-center justify-center shrink-0">
+                            <Bot className="w-4 h-4 text-[#00D2FF]" />
                           </div>
-                        );
-                      })()}
-                    </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-200">Extração Automática com IA (Zero Configuração Manual)</div>
+                            <div className="text-[11px] text-slate-400">A IA analisa o cURL e o objetivo do Agente, extraindo automaticamente apenas os dados necessários para o atendimento.</div>
+                          </div>
+                        </div>
+                        <div className="w-full md:w-auto">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateCurlItem(item.id, 'treatmentMode', 'natural_language')}
+                            className="text-[10px] text-[#00D2FF] hover:underline font-mono cursor-pointer"
+                          >
+                            Especificar campos? Alternar para Linguagem Natural ➔
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
-                  </div>
+                    {/* MODO 2: LINGUAGEM NATURAL */}
+                    {item.treatmentMode === 'natural_language' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5" />
+                            Exemplo de Resposta da API (JSON)
+                          </label>
+                          <textarea
+                            rows={6}
+                            value={item.responseSample || ''}
+                            onChange={e => handleUpdateCurlItem(item.id, 'responseSample', e.target.value)}
+                            placeholder={`{\n  "status": "success",\n  "clientes": [\n    {\n      "nome": "CARLOS",\n      "cpfcnpj": "12345678900",\n      "contratos": [{ "id": 101, "status": "ATIVO" }]\n    }\n  ]\n}`}
+                            className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-emerald-200 font-mono leading-relaxed focus:border-emerald-500 focus:outline-none"
+                          />
+                        </div>
 
-                  {/* Bloco 3: Script JS Gerado e Editável no Nó de Código */}
-                  <div className="space-y-1.5 pt-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-bold text-[#00D2FF] uppercase tracking-wider flex items-center gap-1.5">
-                        <Code2 className="w-3.5 h-3.5" />
-                        3. Script JavaScript Gerado no Nó de Código (tratar_dados)
-                      </label>
-                      {item.generatedJsCode && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(item.generatedJsCode || '');
-                            showTreatmentToast(item.id, '📋 Script copiado para a área de transferência!');
-                          }}
-                          className="px-2 py-0.5 rounded bg-[#061833] hover:bg-[#0b2854] border border-[#0066FF]/30 text-slate-300 hover:text-white text-[10px] font-mono flex items-center gap-1 cursor-pointer transition-all"
-                        >
-                          <Copy className="w-3 h-3 text-[#00D2FF]" />
-                          <span>Copiar Código</span>
-                        </button>
-                      )}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <Edit3 className="w-3.5 h-3.5" />
+                              O que Extrair (Linguagem Natural)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateJsTreatment(item.id, item.responseSample, item.name, item.filterRules)}
+                              className="px-2.5 py-0.5 rounded-md bg-linear-to-r from-amber-500/20 via-emerald-500/20 to-[#00D2FF]/20 hover:from-amber-500/30 hover:to-[#00D2FF]/30 border border-amber-400/40 hover:border-amber-300 text-amber-300 hover:text-amber-100 text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer transform active:scale-95"
+                              title="Atualizar o script JS com base na sua instrução em linguagem natural"
+                            >
+                              <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
+                              <span>Atualizar Script JS</span>
+                            </button>
+                          </div>
+
+                          <textarea
+                            rows={3}
+                            value={item.filterRules || ''}
+                            onChange={e => handleUpdateCurlItem(item.id, 'filterRules', e.target.value)}
+                            placeholder={`Ex: Extrair nome, CPF e contratos ativos. Remover tipo e endereço.`}
+                            className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-sans leading-relaxed focus:border-amber-500 focus:outline-none"
+                          />
+
+                          {/* Chips de campos detectados */}
+                          {(() => {
+                            const detected = getDetectedKeysFromSample(item.responseSample);
+                            if (detected.keys.length === 0) return null;
+                            return (
+                              <div className="pt-1">
+                                <div className="text-[10px] text-slate-400 font-sans mb-1">Campos detectados no JSON (clique para alternar):</div>
+                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+                                  {detected.keys.map(k => {
+                                    const isRemoved = (item.filterRules || '').toLowerCase().includes(`remover ${k.toLowerCase()}`) || (item.filterRules || '').toLowerCase().includes(`sem ${k.toLowerCase()}`);
+                                    return (
+                                      <button
+                                        key={k}
+                                        type="button"
+                                        onClick={() => handleToggleFieldInPrompt(item.id, item.filterRules || '', k, item.responseSample, item.name)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer border ${
+                                          isRemoved
+                                            ? 'bg-rose-950/40 border-rose-600/40 text-rose-300 line-through'
+                                            : 'bg-[#061e3d] border-[#0066FF]/40 text-cyan-300 hover:border-[#00D2FF] hover:bg-[#082a54]'
+                                        }`}
+                                      >
+                                        {isRemoved ? `✕ ${k}` : `✓ ${k}`}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODO 3: MODELO DE RETORNO DESEJADO */}
+                    {item.treatmentMode === 'target_schema' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5" />
+                            Exemplo de Resposta Bruta da API (JSON)
+                          </label>
+                          <textarea
+                            rows={6}
+                            value={item.responseSample || ''}
+                            onChange={e => handleUpdateCurlItem(item.id, 'responseSample', e.target.value)}
+                            placeholder={`{\n  "paginacao": { "total": 1 },\n  "clientes": [\n    { "codigo": 890, "razao": "EMPRESA", "documento": "123" }\n  ]\n}`}
+                            className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-emerald-200 font-mono leading-relaxed focus:border-emerald-500 focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-[11px] font-bold text-teal-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <Columns className="w-3.5 h-3.5" />
+                              Modelo de Retorno Desejado (JSON ou Texto)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateJsFromTargetSchema(item.id, item.responseSample, item.targetOutputModel, item.name)}
+                              className="px-2.5 py-0.5 rounded-md bg-linear-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-teal-400/40 text-teal-300 hover:text-white text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer transform active:scale-95"
+                              title="Mapear a resposta bruta para este modelo de saída exato"
+                            >
+                              <Sparkles className="w-3 h-3 text-teal-300 animate-pulse" />
+                              <span>Mapear Retorno (Gerar JS)</span>
+                            </button>
+                          </div>
+
+                          <textarea
+                            rows={6}
+                            value={item.targetOutputModel || ''}
+                            onChange={e => handleUpdateCurlItem(item.id, 'targetOutputModel', e.target.value)}
+                            placeholder={`{\n  "id_cliente": 0,\n  "nome": "string",\n  "cpf": "string",\n  "status": "string"\n}`}
+                            className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-teal-200 font-mono leading-relaxed focus:border-teal-400 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Script JS Gerado (Visualizar / Customizar) */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-[#00D2FF] uppercase tracking-wider flex items-center gap-1.5">
+                          <Code2 className="w-3.5 h-3.5" />
+                          Script JavaScript Gerado no Nó de Código (tratar_dados)
+                        </label>
+                        {item.generatedJsCode && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.generatedJsCode || '');
+                              showTreatmentToast(item.id, '📋 Script copiado!');
+                            }}
+                            className="px-2 py-0.5 rounded bg-[#061833] hover:bg-[#0b2854] border border-[#0066FF]/30 text-slate-300 hover:text-white text-[10px] font-mono flex items-center gap-1 cursor-pointer transition-all"
+                          >
+                            <Copy className="w-3 h-3 text-[#00D2FF]" />
+                            <span>Copiar Código</span>
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        rows={5}
+                        value={item.generatedJsCode || ''}
+                        onChange={e => handleUpdateCurlItem(item.id, 'generatedJsCode', e.target.value)}
+                        placeholder={`// O script JavaScript do nó tratar_dados aparecerá aqui automaticamente com base no modo selecionado.`}
+                        className="w-full bg-[#010814] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:border-cyan-400 focus:outline-none"
+                      />
                     </div>
-                    <textarea
-                      rows={6}
-                      value={item.generatedJsCode || ''}
-                      onChange={e => handleUpdateCurlItem(item.id, 'generatedJsCode', e.target.value)}
-                      placeholder={`// O script JavaScript do nó tratar_dados aparecerá aqui automaticamente.\n// Clique em "Atualizar Script JS" para gerar com base no JSON e na sua instrução em linguagem natural.`}
-                      className="w-full bg-[#010814] border border-[#0066FF]/30 rounded-xl p-3 text-xs text-amber-200 font-mono leading-relaxed focus:border-cyan-400 focus:outline-none"
-                    />
                   </div>
 
                 </div>
