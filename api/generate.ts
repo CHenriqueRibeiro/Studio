@@ -218,49 +218,54 @@ async function generateGeminiWithFallback(
     requestedModel || 'gemini-2.5-flash',
     'gemini-2.5-flash',
     'gemini-2.0-flash',
-    'gemini-2.5-pro',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
-    'gemini-3.7-flash'
+    'gemini-1.5-flash'
   ];
   const uniqueModels = Array.from(new Set(modelsToTry));
 
   let lastError: any = null;
 
   for (const modelName of uniqueModels) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        console.log(`[Gemini Engine] Querying model ${modelName} (attempt ${attempt + 1})...`);
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: userContents,
-          config: {
-            ...(systemInstruction ? { systemInstruction } : {}),
-            temperature: typeof temperature === 'number' ? temperature : 0.1,
-            responseMimeType: 'application/json'
-          }
-        });
-
-        if (response && response.text) {
-          return response.text;
+    try {
+      console.log(`[Gemini Engine] Querying model ${modelName}...`);
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: userContents,
+        config: {
+          ...(systemInstruction ? { systemInstruction } : {}),
+          temperature: typeof temperature === 'number' ? temperature : 0.1,
+          responseMimeType: 'application/json'
         }
-      } catch (err: any) {
-        lastError = err;
-        const msg = err?.message || String(err);
-        console.warn(`[Gemini Engine] Model ${modelName} attempt ${attempt + 1} failed: ${msg}`);
+      });
 
-        const isTransient = msg.includes('503') ||
-          msg.includes('high demand') ||
-          msg.includes('UNAVAILABLE') ||
-          msg.includes('429') ||
-          msg.includes('RESOURCE_EXHAUSTED') ||
-          msg.includes('Overloaded');
+      if (response && response.text) {
+        return response.text;
+      }
+    } catch (err: any) {
+      lastError = err;
+      const msg = err?.message || String(err);
+      console.warn(`[Gemini Engine] Model ${modelName} failed: ${msg}`);
 
-        if (isTransient) {
-          await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
-        } else {
-          break;
-        }
+      const isAuthOrClientError = msg.includes('API_KEY_INVALID') ||
+        msg.includes('API key not valid') ||
+        msg.includes('400') ||
+        msg.includes('401') ||
+        msg.includes('403') ||
+        msg.includes('PERMISSION_DENIED') ||
+        msg.includes('INVALID_ARGUMENT');
+
+      if (isAuthOrClientError) {
+        throw err;
+      }
+
+      const isTransient = msg.includes('503') ||
+        msg.includes('high demand') ||
+        msg.includes('UNAVAILABLE') ||
+        msg.includes('429') ||
+        msg.includes('RESOURCE_EXHAUSTED') ||
+        msg.includes('Overloaded');
+
+      if (!isTransient) {
+        break;
       }
     }
   }
@@ -508,12 +513,15 @@ Gere o JSON consolidado estritamente com as chaves:
         });
       }
 
-      if (provider === 'gemini' && apiKey && llmError.message !== 'DEV_SYNTHESIZER_FALLBACK') {
-        console.error('Custom Gemini Key failed:', llmError?.message || llmError);
-        return res.status(400).json({
-          success: false,
-          error: `Falha ao conectar com o Google Gemini: ${llmError?.message || 'Verifique sua chave de API.'}`
-        });
+      if (provider === 'gemini') {
+        const hasKey = (apiKey && apiKey.trim()) || process.env.GEMINI_API_KEY;
+        if (hasKey && llmError.message !== 'DEV_SYNTHESIZER_FALLBACK') {
+          console.error('Gemini Key failed:', llmError?.message || llmError);
+          return res.status(400).json({
+            success: false,
+            error: `Falha ao conectar com o Google Gemini: ${llmError?.message || 'Verifique sua chave de API.'}`
+          });
+        }
       }
 
       console.warn('Fallback Synthesizer active. Synthesizing structural Fortics schemas directly...');
