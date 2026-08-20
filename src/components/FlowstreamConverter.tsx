@@ -34,7 +34,11 @@ import {
   FileJson,
   CheckCheck,
   GitMerge,
-  ArrowRight
+  ArrowRight,
+  Columns,
+  Edit3,
+  Copy,
+  FileText
 } from 'lucide-react';
 
 export const PROVIDER_MODELS: Record<LLMProvider, Array<{ id: string; name: string; tag?: string }>> = {
@@ -576,7 +580,41 @@ export const FlowstreamConverter: React.FC<FlowstreamConverterProps> = ({
     }));
   };
 
-  const handleGenerateStepJsTreatment = (routeId: string, stepId: string, sampleJson?: string, nodeName?: string) => {
+  const getDetectedKeysFromSample = (sampleJson?: string) => {
+    if (!sampleJson || !sampleJson.trim()) return { arrayField: '', keys: [] };
+    try {
+      const parsed = JSON.parse(sampleJson.trim());
+      let arrayField = '';
+      let itemObj: any = parsed;
+
+      if (Array.isArray(parsed)) {
+        itemObj = parsed.length > 0 ? parsed[0] : {};
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        for (const k of Object.keys(parsed)) {
+          if (Array.isArray(parsed[k])) {
+            arrayField = k;
+            itemObj = parsed[k].length > 0 ? parsed[k][0] : {};
+            break;
+          } else if (parsed[k] && typeof parsed[k] === 'object') {
+            for (const sk of Object.keys(parsed[k])) {
+              if (Array.isArray(parsed[k][sk])) {
+                arrayField = `${k}.${sk}`;
+                itemObj = parsed[k][sk].length > 0 ? parsed[k][sk][0] : {};
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const keys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
+      return { arrayField, keys };
+    } catch {
+      return { arrayField: '', keys: [] };
+    }
+  };
+
+  const handleGenerateStepJsTreatment = (routeId: string, stepId: string, sampleJson?: string, nodeName?: string, userPrompt?: string) => {
     if (!sampleJson || !sampleJson.trim()) {
       showToast('error', 'Cole um exemplo de JSON de resposta antes de gerar o script.');
       return;
@@ -602,62 +640,279 @@ export const FlowstreamConverter: React.FC<FlowstreamConverterProps> = ({
             arrayField = k;
             itemObj = parsed[k].length > 0 ? parsed[k][0] : {};
             break;
+          } else if (parsed[k] && typeof parsed[k] === 'object') {
+            for (const sk of Object.keys(parsed[k])) {
+              if (Array.isArray(parsed[k][sk])) {
+                arrayField = `${k}.${sk}`;
+                itemObj = parsed[k][sk].length > 0 ? parsed[k][sk][0] : {};
+                break;
+              }
+            }
           }
         }
       }
 
-      const itemKeys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
-      const idKey = itemKeys.find(k => /^(id|id_cliente|codigo|cod|protocolo|numero)/i.test(k)) || itemKeys[0] || 'id';
-      const nameKey = itemKeys.find(k => /^(nome|name|razao|descricao|titular)/i.test(k)) || itemKeys[1] || 'nome';
-      const docKey = itemKeys.find(k => /^(cpf|cnpj|cpfcnpj|documento|nin)/i.test(k));
-      const statusKey = itemKeys.find(k => /^(status|situacao|ativo)/i.test(k));
+      const allKeys = (itemObj && typeof itemObj === 'object' && !Array.isArray(itemObj)) ? Object.keys(itemObj) : [];
+
+      if (allKeys.length === 0) {
+        showToast('error', 'Nenhum campo detectado no JSON fornecido.');
+        return;
+      }
+
+      const promptLower = (userPrompt || '').toLowerCase();
+      const removedKeys: string[] = [];
+      const includedKeys: string[] = [];
+
+      allKeys.forEach(k => {
+        const kLower = k.toLowerCase();
+        const removeRegex = new RegExp(`(?:remover|retirar|tirar|sem|descartar|excluir|não quero|nao quero)\\s+(?:o\\s+|a\\s+|os\\s+|as\\s+|campo\\s+)?${kLower}`, 'i');
+        if (removeRegex.test(promptLower)) {
+          removedKeys.push(k);
+        } else if (promptLower.includes(kLower)) {
+          includedKeys.push(k);
+        }
+      });
+
+      let activeFields: string[] = [];
+      if (includedKeys.length > 0) {
+        activeFields = includedKeys.filter(k => !removedKeys.includes(k));
+      } else {
+        activeFields = allKeys.filter(k => !removedKeys.includes(k));
+      }
+
+      const onlyMatch = promptLower.match(/(?:só|apenas|somente)\s+([^,\.\n]+)/i);
+      if (onlyMatch) {
+        const onlyText = onlyMatch[1];
+        const matched = allKeys.filter(k => onlyText.includes(k.toLowerCase()));
+        if (matched.length > 0) {
+          activeFields = matched.filter(k => !removedKeys.includes(k));
+        }
+      }
+
+      if (activeFields.length === 0) {
+        activeFields = allKeys.slice(0, 5);
+      }
+
+      const respVarName = nodeName ? `_vars.${nodeName.replace(/[^a-zA-Z0-9_]/g, '_')}` : '_vars.resposta_api';
+      const filterActiveMatch = /(?:ativo|ativos|status ativo|somente ativo)/i.test(promptLower);
+      const limitMatch = promptLower.match(/(\d+)\s*(?:primeiros|registros|itens|contratos|faturas)/i);
+      const limitCount = limitMatch ? parseInt(limitMatch[1], 10) : 5;
+
+      let generatedScript = '';
+      if (arrayField) {
+        generatedScript = `// Script de tratamento gerado com base no Modelo de Resposta e Regras
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+
+    let items = (raw && raw.${arrayField}) ? raw.${arrayField} :
+                (raw && raw.data) ? raw.data :
+                (raw && raw.result && raw.result.items) ? raw.result.items :
+                Array.isArray(raw) ? raw : [raw];
+
+${filterActiveMatch ? `    // Filtrar apenas registros com status ativo\n    items = items.filter(it => it && (it.status === 'ATIVO' || it.ativo === true || it.situacao === 'A'));\n` : ''}
+    let total = items.length;
+    let primeiro = total > 0 ? items[0] : null;
+
+    return {
+        status: total > 0 ? 'sucesso' : 'vazio',
+        total: total,
+        principal: primeiro ? {
+${activeFields.map(k => `            ${k}: primeiro.${k}`).join(',\n')}
+        } : null,
+        itens: items.slice(0, ${limitCount})
+    };
+} catch (e) {
+    return { status: 'erro', message: 'Falha ao formatar dados da API', details: e.message };
+}`;
+      } else {
+        generatedScript = `// Script de tratamento gerado com base no Modelo de Resposta e Regras
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    let data = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : (raw || {});
+
+    return {
+        status: 'sucesso',
+        dados: {
+${activeFields.map(k => `            ${k}: data.${k}`).join(',\n')}
+        }
+    };
+} catch (e) {
+    return { status: 'erro', message: 'Falha ao formatar dados da API', details: e.message };
+}`;
+      }
+
+      setRoutesList(prev => prev.map(r => {
+        if (r.id !== routeId) return r;
+        return {
+          ...r,
+          curlItems: r.curlItems.map(s => s.id === stepId ? {
+            ...s,
+            filterRules: userPrompt !== undefined ? userPrompt : s.filterRules,
+            generatedJsCode: generatedScript
+          } : s)
+        };
+      }));
+
+      showToast('success', 'Script JavaScript de tratamento gerado com sucesso!');
+    } catch (err: any) {
+      showToast('error', `Erro: ${err.message}`);
+    }
+  };
+
+  const handleGenerateStepJsFromTargetSchema = (routeId: string, stepId: string, sampleJson?: string, targetSchema?: string, nodeName?: string) => {
+    if (!sampleJson || !sampleJson.trim()) {
+      showToast('error', 'Cole um exemplo da resposta bruta da API antes de mapear.');
+      return;
+    }
+    if (!targetSchema || !targetSchema.trim()) {
+      showToast('error', 'Cole ou digite o modelo do retorno desejado.');
+      return;
+    }
+
+    try {
+      let sourceObj: any;
+      try {
+        sourceObj = JSON.parse(sampleJson.trim());
+      } catch {
+        showToast('error', 'O modelo de resposta da API não é um JSON válido.');
+        return;
+      }
+
+      let arrayField = '';
+      let itemObj: any = sourceObj;
+
+      if (Array.isArray(sourceObj)) {
+        itemObj = sourceObj.length > 0 ? sourceObj[0] : {};
+      } else if (typeof sourceObj === 'object' && sourceObj !== null) {
+        for (const k of Object.keys(sourceObj)) {
+          if (Array.isArray(sourceObj[k])) {
+            arrayField = k;
+            itemObj = sourceObj[k].length > 0 ? sourceObj[k][0] : {};
+            break;
+          } else if (sourceObj[k] && typeof sourceObj[k] === 'object') {
+            for (const sk of Object.keys(sourceObj[k])) {
+              if (Array.isArray(sourceObj[k][sk])) {
+                arrayField = `${k}.${sk}`;
+                itemObj = sourceObj[k][sk].length > 0 ? sourceObj[k][sk][0] : {};
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const sourceKeys = (itemObj && typeof itemObj === 'object') ? Object.keys(itemObj) : [];
+
+      let targetKeys: string[] = [];
+      try {
+        const parsedTarget = JSON.parse(targetSchema.trim());
+        targetKeys = Object.keys(parsedTarget);
+      } catch {
+        targetKeys = targetSchema
+          .split(/[\n,;]+/)
+          .map(s => s.trim().replace(/[^a-zA-Z0-9_]/g, ''))
+          .filter(Boolean);
+      }
+
+      if (targetKeys.length === 0) {
+        showToast('error', 'Nenhum campo identificado no modelo desejado.');
+        return;
+      }
+
+      const mappingLines: string[] = [];
+      targetKeys.forEach(tKey => {
+        const tLower = tKey.toLowerCase();
+        const exact = sourceKeys.find(s => s.toLowerCase() === tLower);
+        const partial = sourceKeys.find(s => s.toLowerCase().includes(tLower) || tLower.includes(s.toLowerCase()));
+        const matched = exact || partial || tKey;
+        mappingLines.push(`            ${tKey}: principal.${matched} !== undefined ? principal.${matched} : null`);
+      });
 
       const respVarName = nodeName ? `_vars.${nodeName.replace(/[^a-zA-Z0-9_]/g, '_')}` : '_vars.resposta_api';
 
       let generatedScript = '';
       if (arrayField) {
-        generatedScript = `// Script de tratamento gerado a partir do Modelo de Resposta
+        generatedScript = `// Script de mapeamento para o modelo de saída desejado
 try {
     let raw = ${respVarName} || _vars.resposta_api;
     if (typeof raw === 'string') raw = JSON.parse(raw);
-    let items = (raw && raw.${arrayField}) ? raw.${arrayField} : Array.isArray(raw) ? raw : [raw];
-    let primeiro = items.length > 0 ? items[0] : null;
 
+    let items = (raw && raw.${arrayField}) ? raw.${arrayField} :
+                (raw && raw.data) ? raw.data :
+                (raw && raw.result && raw.result.items) ? raw.result.items :
+                Array.isArray(raw) ? raw : [raw];
+
+    let principal = items.length > 0 ? items[0] : (raw || {});
+
+    // Mapeamento transformado estritamente para o Modelo de Retorno Desejado
     return {
         status: items.length > 0 ? 'sucesso' : 'vazio',
-        total: items.length,
-        principal: primeiro ? {
-            ${idKey}: primeiro.${idKey},
-            ${nameKey}: primeiro.${nameKey},${docKey ? `\n            ${docKey}: primeiro.${docKey},` : ''}${statusKey ? `\n            ${statusKey}: primeiro.${statusKey}` : ''}
-        } : null,
-        itens: items.slice(0, 5)
-    };
-} catch (e) {
-    return { status: 'erro', message: e.message };
-}`;
-      } else {
-        generatedScript = `// Script de tratamento gerado a partir do Modelo de Resposta
-try {
-    let raw = ${respVarName} || _vars.resposta_api;
-    if (typeof raw === 'string') raw = JSON.parse(raw);
-    let data = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : raw;
-
-    return {
-        status: 'sucesso',
         dados: {
-            ${itemKeys.slice(0, 6).map(k => `${k}: data.${k}`).join(',\n            ')}
+${mappingLines.join(',\n')}
         }
     };
 } catch (e) {
-    return { status: 'erro', message: e.message };
+    return { status: 'erro', message: 'Falha ao mapear retorno da API', details: e.message };
+}`;
+      } else {
+        generatedScript = `// Script de mapeamento para o modelo de saída desejado
+try {
+    let raw = ${respVarName} || _vars.resposta_api;
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    let principal = (raw && raw.data) ? raw.data : (raw && raw.result) ? raw.result : (raw || {});
+
+    // Mapeamento transformado estritamente para o Modelo de Retorno Desejado
+    return {
+        status: 'sucesso',
+        dados: {
+${mappingLines.join(',\n')}
+        }
+    };
+} catch (e) {
+    return { status: 'erro', message: 'Falha ao mapear retorno da API', details: e.message };
 }`;
       }
 
-      handleUpdateStep(routeId, stepId, 'filterRules', generatedScript);
-      showToast('success', 'Script JavaScript de tratamento gerado com sucesso!');
+      setRoutesList(prev => prev.map(r => {
+        if (r.id !== routeId) return r;
+        return {
+          ...r,
+          curlItems: r.curlItems.map(s => s.id === stepId ? {
+            ...s,
+            targetOutputModel: targetSchema,
+            generatedJsCode: generatedScript
+          } : s)
+        };
+      }));
+
+      showToast('success', 'Mapeamento para o modelo de retorno gerado com sucesso!');
     } catch (err: any) {
-      showToast('error', `Erro: ${err.message}`);
+      showToast('error', `Erro ao mapear: ${err.message}`);
     }
+  };
+
+  const handleToggleStepFieldInPrompt = (routeId: string, stepId: string, currentPrompt: string, fieldName: string, sampleJson?: string, nodeName?: string) => {
+    let newPrompt = '';
+    const lowerPrompt = (currentPrompt || '').toLowerCase();
+    const fieldLower = fieldName.toLowerCase();
+
+    if (lowerPrompt.includes(`remover ${fieldLower}`) || lowerPrompt.includes(`sem ${fieldLower}`)) {
+      newPrompt = currentPrompt
+        .replace(new RegExp(`(?:remover|retirar|tirar|sem|descartar)\\s+${fieldLower}`, 'gi'), '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!newPrompt.toLowerCase().includes(fieldLower)) {
+        newPrompt += ` Incluir ${fieldName}.`;
+      }
+    } else if (lowerPrompt.includes(fieldLower)) {
+      newPrompt = (currentPrompt ? currentPrompt + ' ' : '') + `Remover ${fieldName}.`;
+    } else {
+      newPrompt = (currentPrompt ? currentPrompt + ', ' : 'Extrair ') + `${fieldName}`;
+    }
+
+    handleGenerateStepJsTreatment(routeId, stepId, sampleJson, nodeName, newPrompt.trim());
   };
 
   // Submit and Generate
@@ -1282,40 +1537,211 @@ try {
                         />
                       </div>
 
-                      {/* Exemplo de Resposta & Filtro */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                            Exemplo de Resposta da API (JSON)
+                      {/* Bloco 2: Modelo de Resposta da API (JSON de Exemplo) - SEMPRE PRESENTE */}
+                      <div className="space-y-1 pt-1">
+                        <label className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <FileText className="w-3 h-3" />
+                            Modelo de Resposta da API (JSON de Exemplo)
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-sans normal-case">
+                            Cole o retorno bruto (Postman / Swagger)
+                          </span>
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={step.responseSample || ''}
+                          onChange={e => handleUpdateStep(route.id, step.id, 'responseSample', e.target.value)}
+                          placeholder={`{\n  "status": "success",\n  "clientes": [\n    { "nome": "CARLOS", "cpfcnpj": "12345678900", "contratos": [{ "id": 101, "status": "ATIVO" }] }\n  ]\n}`}
+                          className="w-full bg-[#020b18] border border-[#0066FF]/30 rounded-xl p-2.5 text-xs text-emerald-200 font-mono leading-relaxed focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Bloco 3: Formas de Tratar o Retorno da API (3 Abas) */}
+                      <div className="space-y-2 pt-2 border-t border-[#0066FF]/20">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                          <label className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <ShieldCheck className="w-3 h-3 text-amber-400" />
+                            Como Tratar esse Retorno no Nó de Código?
                           </label>
-                          <textarea
-                            rows={2}
-                            value={step.responseSample || ''}
-                            onChange={e => handleUpdateStep(route.id, step.id, 'responseSample', e.target.value)}
-                            className="w-full bg-[#040f24] border border-[#0066FF]/15 rounded-xl p-2 text-xs font-mono text-slate-300 focus:border-[#00D2FF] focus:outline-none"
-                          />
+                          <div className="flex items-center gap-1 p-0.5 bg-[#020b18] border border-[#0066FF]/30 rounded-lg">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleUpdateStep(route.id, step.id, 'treatmentMode', 'auto_ai');
+                                if (step.responseSample) handleGenerateStepJsTreatment(route.id, step.id, step.responseSample, step.name);
+                              }}
+                              className={`py-1 px-2 rounded-md text-[9px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                (!step.treatmentMode || step.treatmentMode === 'auto_ai')
+                                  ? 'bg-linear-to-r from-[#0052FF] to-[#00D2FF] text-white shadow-sm'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              <Sparkles className="w-2.5 h-2.5 text-cyan-300" />
+                              <span>1. IA Automática</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStep(route.id, step.id, 'treatmentMode', 'natural_language')}
+                              className={`py-1 px-2 rounded-md text-[9px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                step.treatmentMode === 'natural_language'
+                                  ? 'bg-linear-to-r from-amber-600 to-amber-400 text-white shadow-sm'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              <Edit3 className="w-2.5 h-2.5 text-amber-300" />
+                              <span>2. Linguagem Natural</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStep(route.id, step.id, 'treatmentMode', 'target_schema')}
+                              className={`py-1 px-2 rounded-md text-[9px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                step.treatmentMode === 'target_schema'
+                                  ? 'bg-linear-to-r from-emerald-600 to-teal-400 text-white shadow-sm'
+                                  : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              <Columns className="w-2.5 h-2.5 text-emerald-300" />
+                              <span>3. Modelo de Saída</span>
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                              Regras de Filtro & Tratamento de Dados
-                            </label>
+                        {/* OPÇÃO 1: IA AUTOMÁTICA */}
+                        {(!step.treatmentMode || step.treatmentMode === 'auto_ai') && (
+                          <div className="p-3 rounded-xl bg-[#020b18]/80 border border-[#0066FF]/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-lg bg-[#0066FF]/20 border border-[#00D2FF]/30 flex items-center justify-center shrink-0">
+                                <Bot className="w-3.5 h-3.5 text-[#00D2FF]" />
+                              </div>
+                              <div className="text-[11px] text-slate-300">
+                                Extração 100% Automática a partir do Modelo de Resposta.
+                              </div>
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleGenerateStepJsTreatment(route.id, step.id, step.responseSample, step.name)}
-                              className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                              title="Gerar script JavaScript a partir do JSON de resposta"
+                              className="px-2.5 py-1 rounded-lg bg-linear-to-r from-[#0052FF] to-[#00D2FF] hover:brightness-110 text-white text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0"
                             >
-                              <Sparkles className="w-2.5 h-2.5 text-amber-300 animate-pulse" />
-                              <span>Gerar JS</span>
+                              <Sparkles className="w-3 h-3 text-cyan-200 animate-pulse" />
+                              <span>Gerar JS do Modelo</span>
                             </button>
                           </div>
+                        )}
+
+                        {/* OPÇÃO 2: LINGUAGEM NATURAL */}
+                        {step.treatmentMode === 'natural_language' && (
+                          <div className="space-y-2 p-2.5 rounded-xl bg-[#020b18]/80 border border-amber-500/25">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <Edit3 className="w-3 h-3" />
+                                O que Extrair / Modificar (Linguagem Natural)
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => handleGenerateStepJsTreatment(route.id, step.id, step.responseSample, step.name, step.filterRules)}
+                                className="px-2 py-0.5 rounded-md bg-linear-to-r from-amber-500/20 via-emerald-500/20 to-[#00D2FF]/20 hover:from-amber-500/30 hover:to-[#00D2FF]/30 border border-amber-400/40 text-amber-300 hover:text-white text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                              >
+                                <Sparkles className="w-2.5 h-2.5 text-amber-300 animate-pulse" />
+                                <span>Atualizar Script JS</span>
+                              </button>
+                            </div>
+
+                            <textarea
+                              rows={2}
+                              value={step.filterRules || ''}
+                              onChange={e => handleUpdateStep(route.id, step.id, 'filterRules', e.target.value)}
+                              placeholder={`Ex: Extrair nome, CPF e contratos ativos. Remover o campo tipo e endereço.`}
+                              className="w-full bg-[#030e20] border border-amber-500/30 rounded-xl p-2 text-xs text-amber-200 font-sans leading-relaxed focus:border-amber-400 focus:outline-none"
+                            />
+
+                            {/* Chips de campos detectados */}
+                            {(() => {
+                              const detected = getDetectedKeysFromSample(step.responseSample);
+                              if (detected.keys.length === 0) return null;
+                              return (
+                                <div className="pt-0.5">
+                                  <div className="text-[9px] text-slate-400 font-sans mb-1">Campos detectados no JSON (clique para incluir/remover):</div>
+                                  <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
+                                    {detected.keys.map(k => {
+                                      const isRemoved = (step.filterRules || '').toLowerCase().includes(`remover ${k.toLowerCase()}`) || (step.filterRules || '').toLowerCase().includes(`sem ${k.toLowerCase()}`);
+                                      return (
+                                        <button
+                                          key={k}
+                                          type="button"
+                                          onClick={() => handleToggleStepFieldInPrompt(route.id, step.id, step.filterRules || '', k, step.responseSample, step.name)}
+                                          className={`px-1.5 py-0.5 rounded text-[9px] font-mono transition-all cursor-pointer border ${
+                                            isRemoved
+                                              ? 'bg-rose-950/40 border-rose-600/40 text-rose-300 line-through'
+                                              : 'bg-[#061e3d] border-[#0066FF]/40 text-cyan-300 hover:border-[#00D2FF] hover:bg-[#082a54]'
+                                          }`}
+                                        >
+                                          {isRemoved ? `✕ ${k}` : `✓ ${k}`}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+
+                        {/* OPÇÃO 3: MODELO DE SAÍDA DESEJADO */}
+                        {step.treatmentMode === 'target_schema' && (
+                          <div className="space-y-2 p-2.5 rounded-xl bg-[#020b18]/80 border border-teal-500/25">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[10px] font-bold text-teal-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <Columns className="w-3 h-3" />
+                                Modelo de Saída Desejado (JSON ou Texto)
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => handleGenerateStepJsFromTargetSchema(route.id, step.id, step.responseSample, step.targetOutputModel, step.name)}
+                                className="px-2 py-0.5 rounded-md bg-linear-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-teal-400/40 text-teal-300 hover:text-white text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                              >
+                                <Sparkles className="w-2.5 h-2.5 text-teal-300 animate-pulse" />
+                                <span>Mapear Retorno (Gerar JS)</span>
+                              </button>
+                            </div>
+
+                            <textarea
+                              rows={3}
+                              value={step.targetOutputModel || ''}
+                              onChange={e => handleUpdateStep(route.id, step.id, 'targetOutputModel', e.target.value)}
+                              placeholder={`Cole o formato desejado:\n{\n  "nome": "string",\n  "cpf": "string"\n}`}
+                              className="w-full bg-[#030e20] border border-teal-500/30 rounded-xl p-2 text-xs text-teal-200 font-mono leading-relaxed focus:border-teal-400 focus:outline-none"
+                            />
+                          </div>
+                        )}
+
+                        {/* Bloco 4: Script JavaScript Gerado no Nó de Código (tratar_dados) */}
+                        <div className="space-y-1 pt-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold text-[#00D2FF] uppercase tracking-wider flex items-center gap-1.5">
+                              <Code2 className="w-3 h-3" />
+                              Script JavaScript Gerado no Nó de Código (tratar_{step.nodeName || `etapa_${stepIdx + 1}`})
+                            </label>
+                            {step.generatedJsCode && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(step.generatedJsCode || '');
+                                  showToast('success', 'Script copiado!');
+                                }}
+                                className="px-2 py-0.5 rounded bg-[#061833] hover:bg-[#0b2854] border border-[#0066FF]/30 text-slate-300 hover:text-white text-[9px] font-mono flex items-center gap-1 cursor-pointer transition-all"
+                              >
+                                <Copy className="w-2.5 h-2.5 text-[#00D2FF]" />
+                                <span>Copiar Código</span>
+                              </button>
+                            )}
+                          </div>
                           <textarea
-                            rows={2}
-                            value={step.filterRules || ''}
-                            onChange={e => handleUpdateStep(route.id, step.id, 'filterRules', e.target.value)}
-                            className="w-full bg-[#040f24] border border-[#0066FF]/15 rounded-xl p-2 text-xs font-mono text-slate-300 focus:border-[#00D2FF] focus:outline-none"
+                            rows={4}
+                            value={step.generatedJsCode || ''}
+                            onChange={e => handleUpdateStep(route.id, step.id, 'generatedJsCode', e.target.value)}
+                            placeholder={`// O script JavaScript do nó de código aparecerá aqui automaticamente com base no Modelo de Resposta e no modo selecionado.`}
+                            className="w-full bg-[#010814] border border-[#0066FF]/30 rounded-xl p-2.5 text-xs text-amber-200 font-mono leading-relaxed focus:border-cyan-400 focus:outline-none"
                           />
                         </div>
                       </div>
