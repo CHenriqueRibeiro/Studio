@@ -344,6 +344,13 @@ Regras e Validações de Negócio:
     setCurlList(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
+  const [treatmentToast, setTreatmentToast] = useState<{ id: string; text: string } | null>(null);
+
+  const showTreatmentToast = (id: string, text: string) => {
+    setTreatmentToast({ id, text });
+    setTimeout(() => setTreatmentToast(null), 3500);
+  };
+
   const getDetectedKeysFromSample = (sampleJson?: string) => {
     if (!sampleJson || !sampleJson.trim()) return { arrayField: '', objectField: '', keys: [] };
     try {
